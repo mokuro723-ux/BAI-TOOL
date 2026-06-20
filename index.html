@@ -9,101 +9,103 @@
   :root{
     --bg:#0f1220; --panel:#1a1f33; --panel2:#222845; --line:#2e3556;
     --txt:#eef1ff; --sub:#9aa3c7; --accent:#5b8cff; --danger:#ff5b6e;
-    --ok:#3ddc97; --tap:44px;
+    --ok:#3ddc97; --active:#2a3a6e; --tap:44px;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0; padding:0; background:var(--bg); color:var(--txt);
     font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;
     overscroll-behavior:none;}
-  body{padding-bottom:160px;}
+  body{padding-bottom:150px;}
   button{font-family:inherit; cursor:pointer;}
-  input,textarea,select{font-family:inherit;}
+  input,textarea{font-family:inherit;}
 
-  /* header */
+  /* header: title + roster */
   header{position:sticky; top:0; z-index:30; background:var(--panel);
-    display:flex; align-items:center; gap:8px; padding:10px 12px;
-    border-bottom:1px solid var(--line);}
-  header h1{font-size:18px; margin:0; flex:1; letter-spacing:.5px;}
-  .hbtn{min-width:var(--tap); height:var(--tap); padding:0 12px; border:none; border-radius:10px;
-    background:var(--panel2); color:var(--txt); font-size:14px;}
+    border-bottom:1px solid var(--line); padding:8px 10px;}
+  .htop{display:flex; align-items:center; gap:8px;}
+  #title{flex:1; font-size:16px; font-weight:700; background:transparent; border:none;
+    color:var(--txt); padding:6px 4px; min-width:0;}
+  #title::placeholder{color:var(--sub);}
+  .hbtn{height:36px; padding:0 12px; border:none; border-radius:9px;
+    background:var(--panel2); color:var(--txt); font-size:13px; white-space:nowrap;}
   .hbtn:active{background:var(--line);}
+  .hroster{display:flex; gap:4px; overflow-x:auto; padding:6px 2px 2px; -webkit-overflow-scrolling:touch;}
+  .hroster::-webkit-scrollbar{display:none;}
+  .hroster .empty{color:var(--sub); font-size:12px; padding:4px;}
 
-  /* control bar */
-  .control{display:flex; gap:8px; align-items:center; padding:8px 12px;
-    color:var(--sub); font-size:13px; flex-wrap:wrap;}
-  .pill{background:var(--panel2); border-radius:999px; padding:6px 12px; color:var(--txt);
-    border:none; font-size:13px;}
-  .pill b{color:var(--accent);}
+  /* table */
+  .thead, .trow{display:flex; align-items:stretch; border-bottom:1px solid var(--line);}
+  .thead{background:var(--panel2); color:var(--sub); font-size:11px; font-weight:700;}
+  .thead>div{padding:5px 4px; display:flex; align-items:center;}
+  .c-num{flex:0 0 40px; border-right:1px solid var(--line);}
+  .c-time{flex:0 0 52px; border-right:1px solid var(--line);}
+  .c-cells{flex:1 1 auto; min-width:0; border-right:1px solid var(--line);}
+  .c-memo{flex:0 0 92px;}
 
-  /* event list */
-  #list{padding:4px 10px 8px;}
-  .empty{color:var(--sub); text-align:center; padding:40px 20px; font-size:14px; line-height:1.7;}
-  .row{display:flex; align-items:center; gap:10px; background:var(--panel);
-    border:1px solid var(--line); border-radius:12px; padding:8px 10px; margin-bottom:8px;}
-  .row:active{background:var(--panel2);}
-  .val{flex:0 0 64px; text-align:center; font-variant-numeric:tabular-nums;
-    font-weight:700; font-size:18px; color:var(--accent);}
-  .val small{display:block; font-size:10px; color:var(--sub); font-weight:400;}
-  .flow{flex:1; display:flex; align-items:center; gap:6px; flex-wrap:wrap; min-width:0;}
-  .arrow{color:var(--sub); font-size:16px;}
-  .memo{flex-basis:100%; color:var(--sub); font-size:12px; padding-left:74px;
-    word-break:break-word;}
-  .ord{flex:0 0 22px; display:flex; flex-direction:column; gap:2px;}
-  .ord button{width:22px; height:20px; border:none; border-radius:6px; background:var(--panel2);
-    color:var(--sub); font-size:11px; line-height:1; padding:0;}
+  .trow{background:var(--panel); min-height:40px;}
+  .trow.active{background:var(--active);}
+  .trow input{width:100%; height:100%; min-height:40px; background:transparent; border:none;
+    color:var(--txt); font-size:14px; padding:4px; text-align:center;}
+  .trow input.c-memo{text-align:left; font-size:12px; color:var(--sub);}
+  .trow .c-num input, .trow .c-time input{font-weight:700; font-variant-numeric:tabular-nums;}
+  .trow .c-time input{color:var(--accent);}
+  .cellwrap{flex:1 1 auto; min-width:0; display:flex; flex-wrap:wrap; align-content:center;
+    gap:3px; padding:4px;}
+  .cellwrap:empty::before{content:"＋"; color:#3a4373; font-size:14px;}
+
+  /* placed cell */
+  .cell{position:relative; width:28px; height:28px; flex:0 0 auto; touch-action:none;}
+  .cell .av{width:28px; height:28px; font-size:11px;}
+  .cbadge{position:absolute; right:-3px; bottom:-3px; min-width:15px; height:15px; padding:0 2px;
+    border-radius:8px; background:#000a; color:#fff; font-size:10px; font-weight:700;
+    line-height:15px; text-align:center;}
 
   /* avatar */
-  .av{width:38px; height:38px; border-radius:50%; flex:0 0 auto; display:flex;
-    align-items:center; justify-content:center; font-size:13px; font-weight:700;
-    color:#fff; overflow:hidden; border:2px solid rgba(255,255,255,.25);}
+  .av{border-radius:50%; flex:0 0 auto; display:flex; align-items:center; justify-content:center;
+    font-weight:700; color:#fff; overflow:hidden; border:2px solid rgba(255,255,255,.25);}
   .av img{width:100%; height:100%; object-fit:cover;}
-  .av.sm{width:30px; height:30px; font-size:11px;}
+  .av.r{width:36px; height:36px; font-size:12px;}
   .av.lg{width:52px; height:52px; font-size:16px;}
+  .av.sm{width:24px; height:24px; font-size:10px;}
 
-  /* memo area */
+  /* memo / save */
   .memobox{padding:10px 12px;}
   .memobox label{font-size:12px; color:var(--sub);}
-  .memobox textarea{width:100%; min-height:60px; margin-top:6px; background:var(--panel);
-    color:var(--txt); border:1px solid var(--line); border-radius:10px; padding:10px;
-    font-size:14px; resize:vertical;}
-
-  .save{display:block; width:calc(100% - 24px); margin:6px 12px 20px; height:50px;
-    background:var(--ok); color:#06281c; border:none; border-radius:12px;
-    font-size:16px; font-weight:700;}
+  .memobox textarea{width:100%; min-height:54px; margin-top:6px; background:var(--panel);
+    color:var(--txt); border:1px solid var(--line); border-radius:10px; padding:10px; font-size:14px; resize:vertical;}
+  .save{display:block; width:calc(100% - 24px); margin:6px 12px 16px; height:48px;
+    background:var(--ok); color:#06281c; border:none; border-radius:12px; font-size:16px; font-weight:700;}
   .save:active{filter:brightness(.92);}
 
-  /* quick log bar (thumb zone) */
-  .quickbar{position:fixed; left:0; right:0; bottom:0; z-index:40; background:var(--panel);
-    border-top:1px solid var(--line); padding:8px 10px calc(8px + env(safe-area-inset-bottom));}
-  .qtop{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
-  .stepper{display:flex; align-items:center; gap:0; background:var(--panel2); border-radius:10px; overflow:hidden;}
-  .stepper button{width:40px; height:var(--tap); border:none; background:transparent; color:var(--txt); font-size:20px;}
-  .stepper button:active{background:var(--line);}
-  .stepper input{width:74px; height:var(--tap); border:none; background:transparent; color:var(--accent);
-    text-align:center; font-size:20px; font-weight:700; font-variant-numeric:tabular-nums;}
-  .qhint{flex:1; font-size:11px; color:var(--sub); line-height:1.3;}
-  .roster{display:flex; gap:8px; overflow-x:auto; padding-bottom:2px; -webkit-overflow-scrolling:touch;}
-  .roster::-webkit-scrollbar{display:none;}
+  /* bottom bar (thumb zone) */
+  .bar{position:fixed; left:0; right:0; bottom:0; z-index:40; background:var(--panel);
+    border-top:1px solid var(--line); padding:6px 8px calc(6px + env(safe-area-inset-bottom));}
+  .barbtns{display:flex; gap:6px; align-items:center; margin-bottom:6px;}
+  .bb{height:38px; padding:0 12px; border:none; border-radius:9px; background:var(--panel2);
+    color:var(--txt); font-size:13px; white-space:nowrap;}
+  .bb:active{background:var(--line);}
+  .bb.act{background:var(--accent); color:#fff;}
+  .bb.sub{flex:0 0 auto; width:40px; padding:0; color:var(--sub);}
+  .barbtns .spacer{flex:1;}
+  .hint{font-size:10px; color:var(--sub); margin:0 2px 4px;}
+  .barroster{display:flex; gap:8px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:2px;}
+  .barroster::-webkit-scrollbar{display:none;}
   .rchip{flex:0 0 auto; display:flex; flex-direction:column; align-items:center; gap:2px;
-    background:transparent; border:none; padding:0; width:54px;}
-  .rchip span{font-size:10px; color:var(--sub); max-width:54px; overflow:hidden;
-    white-space:nowrap; text-overflow:ellipsis;}
-  .rchip:active .av{transform:scale(.9);}
+    background:transparent; border:none; padding:0; width:46px;}
+  .rchip span{font-size:9px; color:var(--sub); max-width:46px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;}
+  .rchip:active .av{transform:scale(.88);}
   .rchip.add .av{background:var(--panel2); border:2px dashed var(--line); color:var(--sub);}
 
-  /* modal / bottom sheet */
-  .mask{position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.55);
-    display:none; align-items:flex-end;}
+  /* sheet */
+  .mask{position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.55); display:none; align-items:flex-end;}
   .mask.open{display:flex;}
   .sheet{width:100%; background:var(--panel); border-radius:18px 18px 0 0;
-    padding:16px 16px calc(16px + env(safe-area-inset-bottom)); max-height:88vh; overflow-y:auto;}
+    padding:16px 16px calc(16px + env(safe-area-inset-bottom)); max-height:90vh; overflow-y:auto;}
   .sheet h2{margin:0 0 12px; font-size:16px;}
   .field{margin-bottom:14px;}
   .field>label{display:block; font-size:12px; color:var(--sub); margin-bottom:6px;}
-  .field input[type=text], .field input[type=number]{width:100%; height:var(--tap); background:var(--panel2);
+  .field input[type=text]{width:100%; height:var(--tap); background:var(--panel2);
     border:1px solid var(--line); border-radius:10px; color:var(--txt); padding:0 12px; font-size:15px;}
-  .field textarea{width:100%; min-height:54px; background:var(--panel2); border:1px solid var(--line);
-    border-radius:10px; color:var(--txt); padding:10px; font-size:15px; resize:vertical;}
   .picker{display:flex; flex-wrap:wrap; gap:8px;}
   .pick{position:relative; border:none; background:transparent; padding:0;}
   .pick .av{border-color:rgba(255,255,255,.15);}
@@ -116,13 +118,6 @@
   .btn.primary{background:var(--accent); color:#fff;}
   .btn.ghost{background:var(--panel2); color:var(--txt);}
   .btn.del{background:transparent; color:var(--danger); border:1px solid var(--danger); flex:0 0 auto; padding:0 16px;}
-  .seg{display:flex; background:var(--panel2); border-radius:10px; padding:3px; gap:3px;}
-  .seg button{flex:1; height:38px; border:none; border-radius:8px; background:transparent; color:var(--sub); font-size:14px;}
-  .seg button.sel{background:var(--accent); color:#fff;}
-  .rosterMgr{display:flex; flex-direction:column; gap:8px;}
-  .mgrItem{display:flex; align-items:center; gap:10px; background:var(--panel2); border-radius:10px; padding:8px;}
-  .mgrItem .name{flex:1; font-size:14px;}
-  .mgrItem button{height:36px; border:none; border-radius:8px; padding:0 12px; font-size:13px; background:var(--line); color:var(--txt);}
   .results{display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; max-height:170px; overflow-y:auto;}
   .nameChip{border:1px solid var(--line); background:var(--panel2); color:var(--txt);
     border-radius:999px; padding:9px 14px; font-size:14px; min-height:40px;}
@@ -131,48 +126,47 @@
   .libpick{position:relative;}
   .libdel{position:absolute; top:-4px; right:-4px; width:20px; height:20px; border-radius:50%;
     background:var(--danger); color:#fff; font-size:13px; line-height:20px; text-align:center; font-style:normal;}
+  .mgrItem{display:flex; align-items:center; gap:10px; background:var(--panel2); border-radius:10px; padding:8px; margin-bottom:8px;}
+  .mgrItem .name{flex:1; font-size:14px;}
+  .mgrItem button{height:36px; border:none; border-radius:8px; padding:0 12px; font-size:13px; background:var(--line); color:var(--txt);}
 </style>
 </head>
 <body>
 
 <header>
-  <h1>BAI Tool</h1>
-  <button class="hbtn" id="btnChars">キャラ</button>
-  <button class="hbtn" id="btnSettings">設定</button>
+  <div class="htop">
+    <input id="title" placeholder="タイトル（例: ホバークラフト TMT 2凸 前半）">
+    <button class="hbtn" id="btnRoster">キャラ編集</button>
+    <button class="hbtn" id="btnSave2">保存</button>
+  </div>
+  <div class="hroster" id="hroster"></div>
 </header>
 
-<div class="control">
-  <button class="pill" id="modeInfo">左列: <b id="modeLabel">タイム</b></button>
-  <button class="pill" id="titlePill">TL名: <b id="titleLabel">無題</b></button>
-  <button class="pill" id="btnSort">並べ替え</button>
-  <button class="pill" id="btnClear">全消去</button>
+<div class="thead">
+  <div class="c-num">数字</div>
+  <div class="c-time">タイム</div>
+  <div class="c-cells">キャラ配置</div>
+  <div class="c-memo">メモ</div>
 </div>
 
-<div id="list"></div>
-
-<div class="memobox">
-  <label for="memoAll">メモ（TL全体）</label>
-  <textarea id="memoAll" placeholder="編成・注意点など"></textarea>
-</div>
+<div id="table"></div>
 
 <button class="save" id="btnSave">📷 画像として保存</button>
 
-<!-- quick log bar -->
-<div class="quickbar">
-  <div class="qtop">
-    <div class="stepper" id="stepper">
-      <button data-step="-1" id="stMinus">−</button>
-      <input type="text" id="valInput" inputmode="numeric" value="4:00">
-      <button data-step="1" id="stPlus">＋</button>
-    </div>
-    <div class="qhint" id="qhint">アイコンをタップで即記録。長押しで対象/メモを追加。</div>
+<!-- bottom bar -->
+<div class="bar">
+  <div class="hint" id="hint">アイコンをタップ＝選択中の行に配置 ／ 置いたアイコンをフリック: 上下＝数字, 左＝削除, 右＝複製</div>
+  <div class="barbtns">
+    <button class="bb act" id="btnAddRow">＋ 行を追加</button>
+    <button class="bb sub" id="btnUp" title="上へ">▲</button>
+    <button class="bb sub" id="btnDown" title="下へ">▼</button>
+    <button class="bb sub" id="btnDup" title="複製">⧉</button>
+    <button class="bb sub" id="btnDelRow" title="行削除" style="color:var(--danger)">🗑</button>
   </div>
-  <div class="roster" id="roster"></div>
+  <div class="barroster" id="barroster"></div>
 </div>
 
-<!-- generic sheet -->
 <div class="mask" id="mask"><div class="sheet" id="sheet"></div></div>
-
 <canvas id="exportCanvas" style="display:none"></canvas>
 
 <script>
@@ -187,122 +181,149 @@ const CHAR_NAMES = ["アイリ","アオバ","アカネ","アカリ","アコ","�
 /* CHAR_NAMES:END */
 /* ひらがな→カタカナ（検索一致用） */
 function toKata(s){ return (s||"").replace(/[ぁ-ゖ]/g, m=>String.fromCharCode(m.charCodeAt(0)+0x60)); }
-const LS_KEY = "bai-tool-v1";
-let state = load();
 
-function defaultState(){
-  return { title:"無題", mode:"time", maxTime:240,
-    characters:[], events:[], memo:"", imgLib:{} };
+const LS_KEY = "bai-tool-v1";
+const uid = ()=> Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+function newRow(){ return { id:uid(), num:"", time:"", cells:[], memo:"" }; }
+function defaultState(){ return { title:"", roster:[], rows:[newRow()], imgLib:{}, activeId:null }; }
+function migrate(s){
+  if(!s.roster) s.roster = Array.isArray(s.characters) ? s.characters.map((c,i)=>Object.assign({num:i+1},c)) : [];
+  if(!Array.isArray(s.rows) || !s.rows.length) s.rows = [newRow()];
+  if(!s.imgLib) s.imgLib = {};
+  delete s.characters; delete s.events; delete s.mode; delete s.maxTime; delete s.memo;
 }
 function load(){
-  try{ const s = JSON.parse(localStorage.getItem(LS_KEY)); if(s&&s.characters) return Object.assign(defaultState(), s); }catch(e){}
+  try{ const s=JSON.parse(localStorage.getItem(LS_KEY)); if(s){ migrate(s); return Object.assign(defaultState(), s); } }catch(e){}
   return defaultState();
 }
+let state = load();
+if(!state.activeId || !state.rows.find(r=>r.id===state.activeId)) state.activeId = state.rows[state.rows.length-1].id;
+
 let saveTimer=null;
-function save(){ clearTimeout(saveTimer); saveTimer=setTimeout(()=>{ try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){ alert("保存に失敗（容量不足の可能性）"); } }, 120); }
-const uid = ()=> Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-const charById = id => state.characters.find(c=>c.id===id);
+function save(){ clearTimeout(saveTimer); saveTimer=setTimeout(()=>{
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){ alert("保存に失敗（容量不足の可能性）"); } }, 120); }
+const rosterById = id => state.roster.find(c=>c.id===id);
+function escapeHTML(s){ return (s||"").replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
 
-/* ===== value formatting (time vs cost) ===== */
-function fmtVal(v){
-  if(state.mode==="time"){
-    v = Math.max(0, Math.round(v));
-    const m=Math.floor(v/60), s=v%60;
-    return m+":"+String(s).padStart(2,"0");
-  }
-  return (Math.round(v*10)/10).toString();
-}
-function parseVal(str){
-  str=(str||"").trim();
-  if(state.mode==="time"){
-    if(str.includes(":")){ const[m,s]=str.split(":"); return (parseInt(m||0)*60)+(parseInt(s||0)); }
-    return parseInt(str||0)||0;
-  }
-  return parseFloat(str)||0;
-}
-function curVal(){ return parseVal(document.getElementById("valInput").value); }
-function setValInput(v){ document.getElementById("valInput").value = fmtVal(v); }
-
-/* ===== avatar render ===== */
+/* ===== avatar ===== */
 function avatarHTML(c, cls){
   cls = cls||"";
   if(!c) return `<span class="av ${cls}" style="background:#444">?</span>`;
   if(c.img) return `<span class="av ${cls}" style="background:${c.color}"><img src="${c.img}"></span>`;
-  const t = (c.text||c.name||"?").slice(0,2);
+  const t=(c.text||c.name||"?").slice(0,2);
   return `<span class="av ${cls}" style="background:${c.color}">${escapeHTML(t)}</span>`;
 }
-function escapeHTML(s){ return (s||"").replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
 
 /* ===== render ===== */
 function render(){
-  document.getElementById("modeLabel").textContent = state.mode==="time"?"タイム":"コスト";
-  document.getElementById("titleLabel").textContent = state.title||"無題";
-  document.getElementById("memoAll").value = state.memo||"";
-  renderRoster();
-  renderList();
+  document.getElementById("title").value = state.title||"";
+  renderRosterBars();
+  renderTable();
 }
-
-function renderRoster(){
-  const r=document.getElementById("roster"); r.innerHTML="";
-  state.characters.forEach(c=>{
+function renderRosterBars(){
+  const top=document.getElementById("hroster"), bar=document.getElementById("barroster");
+  top.innerHTML=""; bar.innerHTML="";
+  if(!state.roster.length){ top.innerHTML='<span class="empty">右上「キャラ編集」で今回使うキャラを登録</span>'; }
+  state.roster.forEach(c=>{
+    const a=document.createElement("button"); a.className="rchip"; a.style.width="40px";
+    a.innerHTML=avatarHTML(c,"sm"); a.onclick=()=>openCharSheet(c.id); top.appendChild(a);
     const b=document.createElement("button"); b.className="rchip";
-    b.innerHTML = avatarHTML(c) + `<span>${escapeHTML(c.name||c.text||"")}</span>`;
-    let lp=null, moved=false;
-    const start=()=>{ moved=false; lp=setTimeout(()=>{ lp=null; openEventSheet(null, c.id); }, 450); };
-    const end=()=>{ if(lp){ clearTimeout(lp); lp=null; if(!moved) quickLog(c.id); } };
-    b.addEventListener("touchstart",start,{passive:true});
-    b.addEventListener("touchmove",()=>{moved=true;},{passive:true});
-    b.addEventListener("touchend",end);
-    // mouse fallback (desktop testing)
-    b.addEventListener("click",()=>{ if(!('ontouchstart'in window)) quickLog(c.id); });
-    b.addEventListener("contextmenu",e=>{ e.preventDefault(); openEventSheet(null,c.id); });
-    r.appendChild(b);
+    b.innerHTML=avatarHTML(c,"r")+`<span>${escapeHTML(c.name||c.text||"")}</span>`;
+    b.onclick=()=>placeChar(c.id); bar.appendChild(b);
   });
   const add=document.createElement("button"); add.className="rchip add";
-  add.innerHTML=`<span class="av">＋</span><span>キャラ</span>`;
-  add.onclick=()=>openCharSheet(null);
-  r.appendChild(add);
+  add.innerHTML=`<span class="av r">＋</span><span>追加</span>`;
+  add.onclick=()=>openCharSheet(null); bar.appendChild(add);
 }
 
-function renderList(){
-  const list=document.getElementById("list"); list.innerHTML="";
-  if(state.events.length===0){
-    list.innerHTML=`<div class="empty">下のアイコンをタップしてTLを記録。<br>まずは右下「＋キャラ」でキャラ登録。</div>`;
-    return;
-  }
-  state.events.forEach((ev,i)=>{
-    const actor=charById(ev.actorId);
-    const row=document.createElement("div"); row.className="row";
-    let flow = avatarHTML(actor,"");
-    if(ev.targetIds&&ev.targetIds.length){
-      flow += `<span class="arrow">→</span>`;
-      flow += ev.targetIds.map(id=>avatarHTML(charById(id),"sm")).join("");
-    }
-    row.innerHTML =
-      `<div class="ord"><button data-up="${i}">▲</button><button data-dn="${i}">▼</button></div>`+
-      `<div class="val">${fmtVal(ev.value)}<small>${state.mode==="time"?"time":"cost"}</small></div>`+
-      `<div class="flow">${flow}</div>`+
-      (ev.memo?`<div class="memo">${escapeHTML(ev.memo)}</div>`:"");
-    row.querySelector(".flow").onclick=()=>openEventSheet(ev.id);
-    row.querySelector(".val").onclick=()=>openEventSheet(ev.id);
-    row.querySelector("[data-up]").onclick=()=>moveEvent(i,-1);
-    row.querySelector("[data-dn]").onclick=()=>moveEvent(i,1);
-    list.appendChild(row);
+function renderTable(){
+  const t=document.getElementById("table"); t.innerHTML="";
+  state.rows.forEach(row=> t.appendChild(buildRow(row)));
+}
+function buildRow(row){
+  const el=document.createElement("div"); el.className="trow"+(row.id===state.activeId?" active":"");
+  el.dataset.row=row.id;
+  const num=document.createElement("input"); num.className="c-num"; num.value=row.num; num.placeholder="";
+  num.setAttribute("inputmode","text");
+  const time=document.createElement("input"); time.className="c-time"; time.value=row.time; time.setAttribute("inputmode","numeric");
+  const cells=document.createElement("div"); cells.className="cellwrap c-cells";
+  const memo=document.createElement("input"); memo.className="c-memo"; memo.value=row.memo;
+  num.oninput=()=>{ row.num=num.value; save(); };
+  time.oninput=()=>{ row.time=time.value; save(); };
+  memo.oninput=()=>{ row.memo=memo.value; save(); };
+  [num,time,memo].forEach(inp=> inp.addEventListener("focus",()=>setActive(row.id)) );
+  cells.addEventListener("click",()=>setActive(row.id));
+  el.append(num,time,cells,memo);
+  renderCells(row, cells);
+  return el;
+}
+function renderCells(row, wrap){
+  wrap.innerHTML="";
+  row.cells.forEach((cell,idx)=>{
+    const c=rosterById(cell.charId);
+    const d=document.createElement("div"); d.className="cell";
+    d.innerHTML=avatarHTML(c,"")+(cell.badge?`<span class="cbadge">${escapeHTML(String(cell.badge))}</span>`:"");
+    attachFlick(d, row, idx);
+    wrap.appendChild(d);
   });
 }
+function refreshRowCells(row){
+  const node=document.querySelector(`.trow[data-row="${row.id}"] .cellwrap`);
+  if(node) renderCells(row, node);
+}
+function setActive(id){
+  state.activeId=id; save();
+  document.querySelectorAll(".trow").forEach(n=> n.classList.toggle("active", n.dataset.row===id));
+}
+function activeRow(){ return state.rows.find(r=>r.id===state.activeId) || state.rows[state.rows.length-1]; }
 
-/* ===== event ops ===== */
-function quickLog(actorId){
-  state.events.push({ id:uid(), value:curVal(), actorId, targetIds:[], memo:"" });
-  // auto-advance value for next entry (time counts down, cost counts up)
-  if(state.mode==="time") setValInput(Math.max(0,curVal()-5));
-  else setValInput(curVal()+1);
-  save(); renderList();
+/* ===== cell ops ===== */
+function placeChar(charId){
+  if(!state.roster.length){ openCharSheet(null); return; }
+  const row=activeRow(); if(!row) return;
+  row.cells.push({ charId, badge:null }); save(); refreshRowCells(row);
 }
-function moveEvent(i,d){
-  const j=i+d; if(j<0||j>=state.events.length) return;
-  const a=state.events; [a[i],a[j]]=[a[j],a[i]]; save(); renderList();
+function attachFlick(el, row, idx){
+  let sx=0, sy=0;
+  el.addEventListener("touchstart",e=>{ const t=e.touches[0]; sx=t.clientX; sy=t.clientY; },{passive:true});
+  el.addEventListener("touchend",e=>{ const t=e.changedTouches[0]; gesture(row, idx, t.clientX-sx, t.clientY-sy); });
+  // PC確認用フォールバック
+  el.addEventListener("click",()=>{ if(!('ontouchstart' in window)) bumpBadge(row,idx,1); });
+  el.addEventListener("contextmenu",e=>{ e.preventDefault(); row.cells.splice(idx,1); save(); refreshRowCells(row); });
 }
+function bumpBadge(row,idx,d){ const c=row.cells[idx]; if(!c) return;
+  c.badge=(c.badge||0)+d; if(c.badge<=0) c.badge=null; save(); refreshRowCells(row); }
+function gesture(row, idx, dx, dy){
+  const TH=22, adx=Math.abs(dx), ady=Math.abs(dy);
+  if(adx<TH && ady<TH) return; // タップは無反応（誤削除防止）
+  const cell=row.cells[idx]; if(!cell) return;
+  if(ady>=adx){ bumpBadge(row, idx, dy<0?1:-1); }
+  else if(dx<0){ row.cells.splice(idx,1); save(); refreshRowCells(row); }
+  else { row.cells.splice(idx+1,0,{charId:cell.charId, badge:cell.badge}); save(); refreshRowCells(row); }
+}
+
+/* ===== row ops ===== */
+document.getElementById("btnAddRow").onclick=()=>{
+  const r=newRow(); state.rows.push(r); state.activeId=r.id; save(); renderTable();
+  const node=document.querySelector(`.trow[data-row="${r.id}"]`); if(node) node.scrollIntoView({block:"center",behavior:"smooth"});
+};
+document.getElementById("btnDelRow").onclick=()=>{
+  if(state.rows.length<=1){ const r=activeRow(); r.num=r.time=r.memo=""; r.cells=[]; save(); renderTable(); return; }
+  const i=state.rows.findIndex(r=>r.id===state.activeId); if(i<0) return;
+  state.rows.splice(i,1); state.activeId=(state.rows[i]||state.rows[i-1]).id; save(); renderTable();
+};
+document.getElementById("btnDup").onclick=()=>{
+  const i=state.rows.findIndex(r=>r.id===state.activeId); if(i<0) return;
+  const src=state.rows[i]; const cp=JSON.parse(JSON.stringify(src)); cp.id=uid();
+  state.rows.splice(i+1,0,cp); state.activeId=cp.id; save(); renderTable();
+};
+document.getElementById("btnUp").onclick=()=>moveRow(-1);
+document.getElementById("btnDown").onclick=()=>moveRow(1);
+function moveRow(d){ const i=state.rows.findIndex(r=>r.id===state.activeId); const j=i+d;
+  if(i<0||j<0||j>=state.rows.length) return; const a=state.rows; [a[i],a[j]]=[a[j],a[i]]; save(); renderTable(); }
+
+/* ===== title ===== */
+document.getElementById("title").oninput=e=>{ state.title=e.target.value; save(); };
 
 /* ===== sheets ===== */
 const mask=document.getElementById("mask"), sheet=document.getElementById("sheet");
@@ -310,68 +331,32 @@ function openSheet(html){ sheet.innerHTML=html; mask.classList.add("open"); }
 function closeSheet(){ mask.classList.remove("open"); }
 mask.addEventListener("click",e=>{ if(e.target===mask) closeSheet(); });
 
-/* event editor */
-function openEventSheet(eventId, presetActor){
-  let ev = eventId ? state.events.find(e=>e.id===eventId) : null;
-  const isNew = !ev;
-  if(isNew) ev = { id:uid(), value:curVal(), actorId:presetActor||(state.characters[0]&&state.characters[0].id), targetIds:[], memo:"" };
-  const draft = JSON.parse(JSON.stringify(ev));
-
-  function body(){
-    const actorPick = state.characters.map(c=>
-      `<button class="pick ${draft.actorId===c.id?'sel':''}" data-actor="${c.id}">${avatarHTML(c,"lg")}</button>`).join("");
-    const targetPick = state.characters.map(c=>
-      `<button class="pick ${draft.targetIds.includes(c.id)?'sel':''}" data-target="${c.id}">${avatarHTML(c,"")}</button>`).join("");
-    return `
-    <h2>${isNew?"イベント追加":"イベント編集"}</h2>
-    <div class="field"><label>${state.mode==="time"?"ゲーム内タイム (例 3:30)":"コスト (例 4.5)"}</label>
-      <input type="text" id="evVal" inputmode="${state.mode==="time"?"numeric":"decimal"}" value="${fmtVal(draft.value)}"></div>
-    <div class="field"><label>使用キャラ</label><div class="picker">${actorPick||'<span style="color:var(--sub)">キャラ未登録</span>'}</div></div>
-    <div class="field"><label>対象キャラ（複数可・任意）</label><div class="picker">${targetPick}</div></div>
-    <div class="field"><label>メモ（任意）</label><textarea id="evMemo">${escapeHTML(draft.memo)}</textarea></div>
-    <div class="sheet-actions">
-      ${isNew?"":'<button class="btn del" id="evDel">削除</button>'}
-      <button class="btn ghost" id="evCancel">閉じる</button>
-      <button class="btn primary" id="evSave">保存</button>
-    </div>`;
-  }
-  function bind(){
-    sheet.querySelectorAll("[data-actor]").forEach(b=>b.onclick=()=>{ draft.actorId=b.dataset.actor; rerender(); });
-    sheet.querySelectorAll("[data-target]").forEach(b=>b.onclick=()=>{
-      const id=b.dataset.target; const i=draft.targetIds.indexOf(id);
-      if(i>=0) draft.targetIds.splice(i,1); else draft.targetIds.push(id); rerender(); });
-    const del=sheet.querySelector("#evDel"); if(del) del.onclick=()=>{
-      state.events=state.events.filter(e=>e.id!==ev.id); save(); render(); closeSheet(); };
-    sheet.querySelector("#evCancel").onclick=closeSheet;
-    sheet.querySelector("#evSave").onclick=()=>{
-      draft.value=parseVal(sheet.querySelector("#evVal").value);
-      draft.memo=sheet.querySelector("#evMemo").value;
-      if(!draft.actorId){ alert("使用キャラを選択してください"); return; }
-      if(isNew) state.events.push(draft);
-      else Object.assign(ev, draft);
-      save(); render(); closeSheet();
-    };
-  }
-  function rerender(){ const v=sheet.querySelector("#evVal"); if(v) draft.value=parseVal(v.value);
-    const m=sheet.querySelector("#evMemo"); if(m) draft.memo=m.value; openSheet(body()); bind(); }
-  openSheet(body()); bind();
-}
+/* roster manager */
+document.getElementById("btnRoster").onclick=()=>{
+  const items=state.roster.map(c=>
+    `<div class="mgrItem">${avatarHTML(c,"r")}<span class="name">${escapeHTML(c.name||c.text||"(無名)")}</span>
+     <button data-edit="${c.id}">編集</button></div>`).join("") || '<div style="color:var(--sub)">まだキャラがいません</div>';
+  openSheet(`<h2>今回使用のキャラ（${state.roster.length}/10）</h2>${items}
+    <div class="sheet-actions"><button class="btn ghost" id="mClose">閉じる</button>
+    <button class="btn primary" id="mAdd">＋ 追加</button></div>`);
+  sheet.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openCharSheet(b.dataset.edit));
+  sheet.querySelector("#mAdd").onclick=()=>openCharSheet(null);
+  sheet.querySelector("#mClose").onclick=closeSheet;
+};
 
 /* character editor */
 function openCharSheet(charId){
-  let c = charId ? charById(charId) : null;
+  let c = charId ? rosterById(charId) : null;
   const isNew=!c;
-  if(state.characters.length>=10 && isNew){ alert("キャラは最大10体まで"); return; }
+  if(state.roster.length>=10 && isNew){ alert("キャラは最大10体まで"); return; }
+  const nextNum=()=>{ for(let i=1;i<=10;i++){ if(!state.roster.some(r=>r.num===i)) return i; } return state.roster.length+1; };
   const draft = c ? JSON.parse(JSON.stringify(c)) :
-    { id:uid(), name:"", text:"", color:PALETTE[state.characters.length%PALETTE.length], img:null };
+    { id:uid(), name:"", text:"", color:PALETTE[state.roster.length%PALETTE.length], img:null, num:nextNum() };
 
   function libGalleryHTML(){
-    const keys=Object.keys(state.imgLib||{});
-    if(!keys.length) return "";
-    const items=keys.map(k=>
-      `<button type="button" class="pick libpick" data-lib="${escapeHTML(k)}" title="${escapeHTML(k)}">`+
-      `<span class="av"><img src="${state.imgLib[k]}"></span>`+
-      `<i class="libdel" data-libdel="${escapeHTML(k)}">×</i></button>`).join("");
+    const keys=Object.keys(state.imgLib||{}); if(!keys.length) return "";
+    const items=keys.map(k=>`<button type="button" class="pick libpick" data-lib="${escapeHTML(k)}" title="${escapeHTML(k)}">`+
+      `<span class="av r"><img src="${state.imgLib[k]}"></span><i class="libdel" data-libdel="${escapeHTML(k)}">×</i></button>`).join("");
     return `<div class="field"><label>保存済みアイコン（タップで再利用）</label><div class="picker">${items}</div></div>`;
   }
   function body(){
@@ -380,7 +365,7 @@ function openCharSheet(charId){
     <h2>${isNew?"キャラ追加":"キャラ編集"}</h2>
     <div class="field" style="display:flex; gap:14px; align-items:center;">
       ${avatarHTML(draft,"lg")}
-      <label class="btn ghost" style="display:flex;align-items:center;justify-content:center;cursor:pointer;height:48px;">
+      <label class="btn ghost" style="display:flex;align-items:center;justify-content:center;height:48px;">
         画像を選択<input type="file" accept="image/*" id="cImg" style="display:none"></label>
       ${draft.img?'<button class="btn del" id="cImgClr">画像消去</button>':''}
     </div>
@@ -388,8 +373,8 @@ function openCharSheet(charId){
     <div class="field"><label>名前検索（タップで設定 / ひらがな可）</label>
       <input type="text" id="cSearch" placeholder="ほしの / ホシ など">
       <div class="results" id="cResults"></div></div>
-    <div class="field"><label>キャラ名</label><input type="text" id="cName" value="${escapeHTML(draft.name)}" placeholder="例: ホシノ（リストに無ければ直接入力）"></div>
-    <div class="field"><label>アイコン文字（画像なし時・最大2文字）</label><input type="text" id="cText" maxlength="2" value="${escapeHTML(draft.text)}" placeholder="例: ホシ"></div>
+    <div class="field"><label>キャラ名</label><input type="text" id="cName" value="${escapeHTML(draft.name)}" placeholder="リストに無ければ直接入力"></div>
+    <div class="field"><label>アイコン文字（画像なし時・最大2文字）</label><input type="text" id="cText" maxlength="2" value="${escapeHTML(draft.text)}"></div>
     <div class="field"><label>表示色</label><div class="colors">${colors}</div></div>
     <div class="sheet-actions">
       ${isNew?"":'<button class="btn del" id="cDel">削除</button>'}
@@ -397,12 +382,13 @@ function openCharSheet(charId){
       <button class="btn primary" id="cSave">保存</button>
     </div>`;
   }
+  function sync(){ const n=sheet.querySelector("#cName"), t=sheet.querySelector("#cText");
+    if(n) draft.name=n.value; if(t) draft.text=t.value; }
+  function refresh(){ sync(); openSheet(body()); bind(); }
   function bind(){
-    // 名前検索
     const sEl=sheet.querySelector("#cSearch"), rEl=sheet.querySelector("#cResults");
     function renderResults(){
       const q=toKata((sEl.value||"").trim());
-      // ベース名・バージョン表記（水着/正月等）を一括検索。実在する表示名のみ
       let list = q ? CHAR_NAMES.filter(n=>toKata(n).includes(q)) : CHAR_NAMES;
       list=list.slice(0,60);
       rEl.innerHTML = list.length
@@ -410,203 +396,123 @@ function openCharSheet(charId){
         : '<span style="color:var(--sub);font-size:12px">該当なし。下の「キャラ名」に直接入力してください</span>';
       rEl.querySelectorAll("[data-name]").forEach(b=>b.onclick=()=>{
         sync(); const nm=b.dataset.name; draft.name=nm; if(!draft.text) draft.text=nm.slice(0,2);
-        // 同名で保存済み画像があれば自動復元
-        if(!draft.img && state.imgLib && state.imgLib[nm]) draft.img=state.imgLib[nm];
-        refresh(); });
+        if(!draft.img && state.imgLib && state.imgLib[nm]) draft.img=state.imgLib[nm]; refresh(); });
     }
     sEl.oninput=renderResults; renderResults();
-
-    // 保存済みアイコンの再利用 / 削除
     sheet.querySelectorAll("[data-lib]").forEach(b=>b.onclick=(e)=>{
       if(e.target.hasAttribute("data-libdel")) return;
       sync(); const k=b.dataset.lib; draft.img=state.imgLib[k];
       if(!draft.name) draft.name=k; if(!draft.text) draft.text=k.slice(0,2); refresh(); });
-    sheet.querySelectorAll("[data-libdel]").forEach(x=>x.onclick=(e)=>{
-      e.stopPropagation(); const k=x.dataset.libdel;
+    sheet.querySelectorAll("[data-libdel]").forEach(x=>x.onclick=(e)=>{ e.stopPropagation(); const k=x.dataset.libdel;
       if(confirm("保存済みアイコン「"+k+"」を一覧から削除しますか？")){ delete state.imgLib[k]; save(); refresh(); } });
-
-    // 名前を直接入力したときも、同名の保存済み画像があれば復元
     const nameEl=sheet.querySelector("#cName"); if(nameEl) nameEl.onblur=()=>{ sync();
       if(!draft.img && draft.name && state.imgLib && state.imgLib[draft.name]){ draft.img=state.imgLib[draft.name]; refresh(); } };
-
     sheet.querySelectorAll("[data-col]").forEach(b=>b.onclick=()=>{ draft.color=b.dataset.col; sync(); refresh(); });
     sheet.querySelector("#cImg").onchange=e=>{ const f=e.target.files[0]; if(!f) return;
-      resizeImage(f, dataUrl=>{ draft.img=dataUrl; refresh(); }); };
+      resizeImage(f, d=>{ draft.img=d; refresh(); }); };
     const clr=sheet.querySelector("#cImgClr"); if(clr) clr.onclick=()=>{ draft.img=null; refresh(); };
     const del=sheet.querySelector("#cDel"); if(del) del.onclick=()=>{
-      if(!confirm("削除すると、このキャラを使ったイベントの表示も崩れます。削除しますか？")) return;
-      state.characters=state.characters.filter(x=>x.id!==c.id);
-      save(); render(); closeSheet(); };
+      if(!confirm("削除すると、このキャラを置いたセルの表示も崩れます。削除しますか？")) return;
+      state.roster=state.roster.filter(x=>x.id!==c.id); save(); render(); closeSheet(); };
     sheet.querySelector("#cCancel").onclick=closeSheet;
     sheet.querySelector("#cSave").onclick=()=>{ sync();
       if(!draft.name && !draft.text && !draft.img){ alert("名前かアイコン文字を入力してください"); return; }
-      // アップした画像は名前をキーにライブラリへ保存（次回同名で自動復元・他キャラでも再利用）
       if(draft.img && draft.name){ state.imgLib=state.imgLib||{}; state.imgLib[draft.name]=draft.img; }
-      if(isNew) state.characters.push(draft); else Object.assign(c, draft);
+      if(isNew) state.roster.push(draft); else Object.assign(c, draft);
       save(); render(); closeSheet(); };
   }
-  function sync(){ const n=sheet.querySelector("#cName"), t=sheet.querySelector("#cText");
-    if(n) draft.name=n.value; if(t) draft.text=t.value; }
-  function refresh(){ sync(); openSheet(body()); bind(); }
   openSheet(body()); bind();
-  // 開いたら検索欄へ直行（新規登録時のみ。連打入力を速く）
   if(isNew) setTimeout(()=>{ const s=sheet.querySelector("#cSearch"); if(s) s.focus(); }, 60);
 }
 
 function resizeImage(file, cb){
   const img=new Image(), fr=new FileReader();
-  fr.onload=()=>{ img.onload=()=>{ const S=96; const cv=document.createElement("canvas");
-    cv.width=S; cv.height=S; const ctx=cv.getContext("2d");
-    const m=Math.min(img.width,img.height), sx=(img.width-m)/2, sy=(img.height-m)/2;
-    ctx.drawImage(img,sx,sy,m,m,0,0,S,S);
-    cb(cv.toDataURL("image/jpeg",0.82)); }; img.src=fr.result; };
+  fr.onload=()=>{ img.onload=()=>{ const S=96; const cv=document.createElement("canvas"); cv.width=S; cv.height=S;
+    const ctx=cv.getContext("2d"); const m=Math.min(img.width,img.height), sx=(img.width-m)/2, sy=(img.height-m)/2;
+    ctx.drawImage(img,sx,sy,m,m,0,0,S,S); cb(cv.toDataURL("image/jpeg",0.82)); }; img.src=fr.result; };
   fr.readAsDataURL(file);
 }
 
-/* settings & chars manager */
-document.getElementById("btnSettings").onclick=()=>{
-  openSheet(`
-    <h2>設定</h2>
-    <div class="field"><label>TL名</label><input type="text" id="sTitle" value="${escapeHTML(state.title)}"></div>
-    <div class="field"><label>左列の種類</label>
-      <div class="seg"><button id="mTime" class="${state.mode==='time'?'sel':''}">ゲーム内タイム</button>
-      <button id="mCost" class="${state.mode==='cost'?'sel':''}">コスト</button></div></div>
-    <div class="field" id="maxWrap" style="${state.mode==='time'?'':'display:none'}">
-      <label>開始タイム（秒）例: 240=4:00</label><input type="number" id="sMax" value="${state.maxTime}"></div>
-    <div class="sheet-actions">
-      <button class="btn ghost" id="sCancel">閉じる</button>
-      <button class="btn primary" id="sSave">保存</button></div>`);
-  let mode=state.mode;
-  sheet.querySelector("#mTime").onclick=()=>{ mode="time"; sheet.querySelector("#mTime").classList.add("sel"); sheet.querySelector("#mCost").classList.remove("sel"); sheet.querySelector("#maxWrap").style.display=""; };
-  sheet.querySelector("#mCost").onclick=()=>{ mode="cost"; sheet.querySelector("#mCost").classList.add("sel"); sheet.querySelector("#mTime").classList.remove("sel"); sheet.querySelector("#maxWrap").style.display="none"; };
-  sheet.querySelector("#sCancel").onclick=closeSheet;
-  sheet.querySelector("#sSave").onclick=()=>{
-    state.title=sheet.querySelector("#sTitle").value||"無題";
-    const changed = state.mode!==mode;
-    state.mode=mode; state.maxTime=parseInt(sheet.querySelector("#sMax").value)||240;
-    save(); render();
-    if(state.mode==="time") setValInput(state.maxTime); else setValInput(0);
-    closeSheet();
-  };
-};
-
-document.getElementById("btnChars").onclick=()=>{
-  const items = state.characters.map(c=>
-    `<div class="mgrItem">${avatarHTML(c)}<span class="name">${escapeHTML(c.name||c.text||"(無名)")}</span>
-     <button data-edit="${c.id}">編集</button></div>`).join("") || '<div style="color:var(--sub)">まだキャラがいません</div>';
-  openSheet(`<h2>キャラ管理（${state.characters.length}/10）</h2>
-    <div class="rosterMgr">${items}</div>
-    <div class="sheet-actions">
-      <button class="btn ghost" id="mClose">閉じる</button>
-      <button class="btn primary" id="mAdd">＋ 追加</button></div>`);
-  sheet.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openCharSheet(b.dataset.edit));
-  sheet.querySelector("#mAdd").onclick=()=>openCharSheet(null);
-  sheet.querySelector("#mClose").onclick=closeSheet;
-};
-
-/* control bar buttons */
-document.getElementById("modeInfo").onclick=()=>document.getElementById("btnSettings").click();
-document.getElementById("titlePill").onclick=()=>document.getElementById("btnSettings").click();
-document.getElementById("btnSort").onclick=()=>{
-  state.events.sort((a,b)=> state.mode==="time" ? b.value-a.value : a.value-b.value);
-  save(); renderList();
-};
-document.getElementById("btnClear").onclick=()=>{
-  if(state.events.length && confirm("イベントを全消去しますか？（キャラは残ります）")){ state.events=[]; save(); renderList(); }
-};
-document.getElementById("memoAll").oninput=e=>{ state.memo=e.target.value; save(); };
-
-/* stepper */
-document.getElementById("stepper").querySelectorAll("[data-step]").forEach(b=>{
-  b.onclick=()=>{ const d=parseInt(b.dataset.step);
-    if(state.mode==="time") setValInput(Math.max(0,curVal()+d));
-    else setValInput(Math.max(0, Math.round((curVal()+d*0.5)*10)/10)); };
-});
-document.getElementById("valInput").addEventListener("blur",()=>setValInput(curVal()));
-
 /* ===== PNG export ===== */
 document.getElementById("btnSave").onclick=exportPNG;
-function exportPNG(){
-  if(state.events.length===0){ alert("イベントがありません"); return; }
-  const W=720, pad=24, rowH=64, headH=70;
-  const memoLines = wrapText(state.memo, 70);
-  const memoH = state.memo ? 30 + memoLines.length*22 + 14 : 0;
-  const H = headH + state.events.length*rowH + memoH + pad;
-  const cv=document.getElementById("exportCanvas"); cv.width=W; cv.height=H;
-  const ctx=cv.getContext("2d");
-  ctx.fillStyle="#0f1220"; ctx.fillRect(0,0,W,H);
-  // header
-  ctx.fillStyle="#eef1ff"; ctx.font="bold 26px sans-serif"; ctx.textBaseline="middle";
-  ctx.fillText(state.title||"BAI Tool TL", pad, 30);
-  ctx.fillStyle="#9aa3c7"; ctx.font="14px sans-serif";
-  ctx.fillText("BAI Tool ・ 左列: "+(state.mode==="time"?"タイム":"コスト"), pad, 54);
+document.getElementById("btnSave2").onclick=()=>{ save(); flash("保存しました"); };
+function flash(msg){ const h=document.getElementById("hint"); const o=h.textContent; h.textContent=msg; setTimeout(()=>h.textContent=o,1200); }
 
-  // collect images to load
-  const imgs={}; const toLoad=[];
-  state.characters.forEach(c=>{ if(c.img){ const im=new Image(); im.src=c.img; imgs[c.id]=im; toLoad.push(im); } });
+function exportPNG(){
+  const rows=state.rows;
+  if(rows.every(r=>!r.num&&!r.time&&!r.cells.length&&!r.memo)){ alert("内容がありません"); return; }
+  const W=1040, pad=20, NUM=88, TIME=104, MEMO=240, IC=40, GAP=6;
+  const cellsX=pad+NUM+TIME, cellsW=W-pad-MEMO-cellsX, perLine=Math.max(1,Math.floor((cellsW+GAP)/(IC+GAP)));
+  const headH=70+(state.roster.length?56:0);
+  const rowHeights=rows.map(r=>{ const lines=Math.max(1,Math.ceil((r.cells.length||0)/perLine)); return Math.max(54, lines*(IC+8)+8); });
+  const H=headH + rowHeights.reduce((a,b)=>a+b,0) + pad;
+  const cv=document.getElementById("exportCanvas"); cv.width=W; cv.height=H;
+  const ctx=cv.getContext("2d"); ctx.textBaseline="middle";
+  ctx.fillStyle="#0f1220"; ctx.fillRect(0,0,W,H);
+
+  // images preload
+  const imgs={}, toLoad=[];
+  state.roster.forEach(c=>{ if(c.img){ const im=new Image(); im.src=c.img; imgs[c.id]=im; toLoad.push(im); } });
 
   const draw=()=>{
-    let y=headH;
-    state.events.forEach(ev=>{
-      ctx.fillStyle="#1a1f33"; roundRect(ctx,pad,y,W-pad*2,rowH-8,12); ctx.fill();
-      ctx.fillStyle="#5b8cff"; ctx.font="bold 22px sans-serif"; ctx.textAlign="left"; ctx.textBaseline="middle";
-      ctx.fillText(fmtVal(ev.value), pad+16, y+(rowH-8)/2);
-      let x=pad+110; const cy=y+(rowH-8)/2;
-      drawAvatar(ctx, charById(ev.actorId), x, cy, 22, imgs); x+=54;
-      if(ev.targetIds&&ev.targetIds.length){
-        ctx.fillStyle="#9aa3c7"; ctx.font="20px sans-serif"; ctx.fillText("→", x, cy); x+=28;
-        ev.targetIds.forEach(id=>{ drawAvatar(ctx, charById(id), x, cy, 16, imgs); x+=40; });
-      }
-      if(ev.memo){ ctx.fillStyle="#cfd5f5"; ctx.font="14px sans-serif"; ctx.textAlign="right";
-        ctx.fillText(clip(ev.memo,22), W-pad-14, cy); ctx.textAlign="left"; }
-      y+=rowH;
+    ctx.fillStyle="#eef1ff"; ctx.font="bold 26px sans-serif"; ctx.textAlign="left";
+    ctx.fillText(state.title||"BAI Tool TL", pad, 30);
+    let top=58;
+    if(state.roster.length){
+      ctx.fillStyle="#9aa3c7"; ctx.font="13px sans-serif"; ctx.fillText("使用キャラ:", pad, top+18);
+      let rx=pad+86; state.roster.forEach(c=>{ drawAvatar(ctx,c,rx,top+18,18,imgs); rx+=44; });
+      top+=52;
+    }
+    // header row
+    const hy=top; ctx.fillStyle="#222845"; ctx.fillRect(0,hy,W,28);
+    ctx.fillStyle="#9aa3c7"; ctx.font="bold 13px sans-serif";
+    ctx.fillText("数字", pad+10, hy+14); ctx.fillText("タイム", pad+NUM+10, hy+14);
+    ctx.fillText("キャラ配置", cellsX+6, hy+14); ctx.fillText("メモ", W-MEMO+6, hy+14);
+    let y=hy+28;
+    rows.forEach((r,ri)=>{
+      const h=rowHeights[ri];
+      if(ri%2) { ctx.fillStyle="#161a2e"; ctx.fillRect(0,y,W,h); }
+      ctx.strokeStyle="#2e3556"; ctx.beginPath(); ctx.moveTo(0,y+h); ctx.lineTo(W,y+h); ctx.stroke();
+      const cy=y+h/2;
+      ctx.fillStyle="#eef1ff"; ctx.font="bold 18px sans-serif"; ctx.textAlign="center";
+      if(r.num) ctx.fillText(r.num, pad+NUM/2, cy);
+      ctx.fillStyle="#5b8cff"; if(r.time) ctx.fillText(r.time, pad+NUM+TIME/2, cy);
+      // cells
+      r.cells.forEach((cell,i)=>{ const line=Math.floor(i/perLine), col=i%perLine;
+        const x=cellsX+col*(IC+GAP)+IC/2, yy=y+8+line*(IC+8)+IC/2;
+        drawAvatar(ctx, rosterById(cell.charId), x, yy, IC/2, imgs);
+        if(cell.badge){ ctx.fillStyle="#000a"; ctx.beginPath(); ctx.arc(x+IC/2-4,yy+IC/2-4,9,0,7); ctx.fill();
+          ctx.fillStyle="#fff"; ctx.font="bold 12px sans-serif"; ctx.textAlign="center"; ctx.fillText(String(cell.badge),x+IC/2-4,yy+IC/2-4); }
+      });
+      // memo
+      if(r.memo){ ctx.fillStyle="#cfd5f5"; ctx.font="14px sans-serif"; ctx.textAlign="left";
+        wrap(r.memo,18).slice(0,3).forEach((ln,k)=> ctx.fillText(ln, W-MEMO+6, cy-((Math.min(3,wrap(r.memo,18).length)-1)*9)+k*18)); }
+      y+=h;
     });
-    if(state.memo){ y+=10; ctx.fillStyle="#9aa3c7"; ctx.font="13px sans-serif";
-      ctx.fillText("メモ", pad, y); y+=22; ctx.fillStyle="#cfd5f5"; ctx.font="15px sans-serif";
-      memoLines.forEach(l=>{ ctx.fillText(l, pad, y); y+=22; }); }
-    finishExport(cv);
+    finish(cv);
   };
-  if(toLoad.length===0) draw();
-  else{ let n=0; const done=()=>{ if(++n>=toLoad.length) draw(); };
-    toLoad.forEach(im=>{ if(im.complete) done(); else { im.onload=done; im.onerror=done; } }); }
+  if(!toLoad.length) draw();
+  else{ let n=0; const done=()=>{ if(++n>=toLoad.length) draw(); }; toLoad.forEach(im=>{ im.complete?done():(im.onload=done,im.onerror=done); }); }
 }
 function drawAvatar(ctx,c,x,cy,r,imgs){
-  ctx.save(); ctx.beginPath(); ctx.arc(x+r,cy,r,0,Math.PI*2);
-  ctx.fillStyle=c?c.color:"#444"; ctx.fill();
-  if(c&&c.img&&imgs[c.id]&&imgs[c.id].complete&&imgs[c.id].naturalWidth){
-    ctx.clip(); ctx.drawImage(imgs[c.id], x, cy-r, r*2, r*2);
-  } else {
-    ctx.fillStyle="#fff"; ctx.font="bold "+Math.round(r*0.85)+"px sans-serif";
-    ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillText((c?(c.text||c.name||"?"):"?").slice(0,2), x+r, cy);
-    ctx.textAlign="left";
-  }
+  ctx.save(); ctx.beginPath(); ctx.arc(x,cy,r,0,Math.PI*2); ctx.fillStyle=c?c.color:"#444"; ctx.fill();
+  if(c&&c.img&&imgs[c.id]&&imgs[c.id].complete&&imgs[c.id].naturalWidth){ ctx.clip(); ctx.drawImage(imgs[c.id],x-r,cy-r,r*2,r*2); }
+  else{ ctx.fillStyle="#fff"; ctx.font="bold "+Math.round(r*0.8)+"px sans-serif"; ctx.textAlign="center";
+    ctx.fillText((c?(c.text||c.name||"?"):"?").slice(0,2), x, cy); }
   ctx.restore();
 }
-function finishExport(cv){
-  cv.toBlob(blob=>{
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
+function finish(cv){
+  cv.toBlob(blob=>{ const url=URL.createObjectURL(blob); const a=document.createElement("a");
     a.href=url; a.download=(state.title||"bai-tl")+".png";
-    // iOS Safari: open in new tab so user can long-press to save
     const isIOS=/iP(hone|ad|od)/.test(navigator.platform)||(navigator.userAgent.includes("Mac")&&"ontouchend"in document);
-    if(isIOS){ window.open(url,"_blank"); }
-    else { document.body.appendChild(a); a.click(); a.remove(); }
-    setTimeout(()=>URL.revokeObjectURL(url), 60000);
-  }, "image/png");
+    if(isIOS) window.open(url,"_blank"); else { document.body.appendChild(a); a.click(); a.remove(); }
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+  },"image/png");
 }
-function roundRect(ctx,x,y,w,h,r){ ctx.beginPath();
-  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
-  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
-function clip(s,n){ return s.length>n ? s.slice(0,n-1)+"…" : s; }
-function wrapText(s,n){ if(!s) return []; const out=[]; s.split("\n").forEach(line=>{
-  while(line.length>n){ out.push(line.slice(0,n)); line=line.slice(n); } out.push(line); }); return out; }
+function wrap(s,n){ const out=[]; (s||"").split("\n").forEach(line=>{ while(line.length>n){ out.push(line.slice(0,n)); line=line.slice(n);} out.push(line); }); return out; }
 
 /* ===== init ===== */
-(function init(){
-  if(state.mode==="time") setValInput(state.maxTime); else setValInput(0);
-  render();
-})();
+render();
 </script>
 </body>
 </html>
