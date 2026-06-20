@@ -1,6 +1,9 @@
-// ブルアカ「全キャラクター一覧」からキャラ名を取得し、index.html の CHAR_NAMES を更新する。
+// ブルアカのキャラ名を取得し、index.html の CHAR_NAMES を更新する。
 // GitHub Actions（月1）から実行。手動実行も可: `node scripts/update-chars.mjs`
 // 依存ライブラリなし（Node 18+ の fetch を使用）。
+//
+// 取得元は SchaleDB（プログラム利用前提で公開されている JP のキャラJSON）。
+// 以前は wiki から取得していたが、wiki が GitHub のIPに JS チャレンジを返し自動取得できないため切替。
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -8,8 +11,7 @@ import { dirname, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const HTML_PATH = join(__dirname, "..", "index.html");
-const SRC_URL =
-  "https://bluearchive.wikiru.jp/?%E3%82%AD%E3%83%A3%E3%83%A9%E3%82%AF%E3%82%BF%E3%83%BC%E4%B8%80%E8%A6%A7";
+const SRC_URL = "https://schaledb.com/data/jp/students.min.json";
 const START = "/* CHAR_NAMES:START */";
 const END = "/* CHAR_NAMES:END */";
 
@@ -31,30 +33,31 @@ function buildList(names) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// wiki から取得して名前リストを返す（1回分）
+// SchaleDB から JP のキャラ名を取得して整形リストを返す（1回分）
 async function fetchNames() {
-  // 非ブラウザ UA / Accept 無しは WAF に 415 で弾かれるため、ブラウザ同等のヘッダを送る
   const res = await fetch(SRC_URL, {
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "ja,en-US;q=0.8,en;q=0.6",
+      "User-Agent": "BAI-Tool char list updater (+https://github.com/mokuro723-ux/BAI-TOOL)",
+      Accept: "application/json",
     },
   });
   if (!res.ok) throw new Error(`HTTP ${res.status} (${res.headers.get("content-type")})`);
-  const html = await res.text();
-  const matches = [...html.matchAll(/title="([^"]*?)_icon\.png"/g)].map((m) => m[1]);
-  const list = buildList([...new Set(matches)]);
-  // データセンターIPには稀にボット対策ページが返るため、名前数で正否を判定
+  const data = await res.json();
+  const students = Array.isArray(data) ? data : Object.values(data);
+  // IsReleased = [JP, Global, ...]。JP 実装済みのみ採用
+  const names = students
+    .filter((s) => (Array.isArray(s.IsReleased) ? s.IsReleased[0] : true))
+    .map((s) => s.Name)
+    .filter(Boolean);
+  const list = buildList(names);
   if (list.length < 100) {
-    throw new Error(`only ${list.length} names extracted (html ${html.length}B, snippet: ${html.slice(0, 200).replace(/\s+/g, " ")})`);
+    throw new Error(`only ${list.length} names extracted (data ${students.length} students)`);
   }
   return list;
 }
 
 async function main() {
-  // 断続的なボット対策ページ対策として最大3回リトライ
+  // 一時的なネットワーク失敗に備えて最大3回リトライ
   let list, lastErr;
   for (let i = 1; i <= 3; i++) {
     try {
