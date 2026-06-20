@@ -47,6 +47,10 @@ async function main() {
   const list = buildList([...new Set(matches)]);
 
   if (list.length < 100) {
+    console.error("--- diagnostics ---");
+    console.error("status:", res.status, "content-type:", res.headers.get("content-type"));
+    console.error("html length:", html.length);
+    console.error("snippet:", html.slice(0, 500).replace(/\s+/g, " "));
     throw new Error(`abort: extracted only ${list.length} names (wiki structure may have changed)`);
   }
 
