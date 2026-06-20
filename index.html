@@ -128,6 +128,9 @@
     border-radius:999px; padding:9px 14px; font-size:14px; min-height:40px;}
   .nameChip:active{background:var(--line);}
   .nameChip.sel{border-color:var(--ok); color:var(--ok);}
+  .libpick{position:relative;}
+  .libdel{position:absolute; top:-4px; right:-4px; width:20px; height:20px; border-radius:50%;
+    background:var(--danger); color:#fff; font-size:13px; line-height:20px; text-align:center; font-style:normal;}
 </style>
 </head>
 <body>
@@ -189,7 +192,7 @@ let state = load();
 
 function defaultState(){
   return { title:"無題", mode:"time", maxTime:240,
-    characters:[], events:[], memo:"" };
+    characters:[], events:[], memo:"", imgLib:{} };
 }
 function load(){
   try{ const s = JSON.parse(localStorage.getItem(LS_KEY)); if(s&&s.characters) return Object.assign(defaultState(), s); }catch(e){}
@@ -362,6 +365,15 @@ function openCharSheet(charId){
   const draft = c ? JSON.parse(JSON.stringify(c)) :
     { id:uid(), name:"", text:"", color:PALETTE[state.characters.length%PALETTE.length], img:null };
 
+  function libGalleryHTML(){
+    const keys=Object.keys(state.imgLib||{});
+    if(!keys.length) return "";
+    const items=keys.map(k=>
+      `<button type="button" class="pick libpick" data-lib="${escapeHTML(k)}" title="${escapeHTML(k)}">`+
+      `<span class="av"><img src="${state.imgLib[k]}"></span>`+
+      `<i class="libdel" data-libdel="${escapeHTML(k)}">×</i></button>`).join("");
+    return `<div class="field"><label>保存済みアイコン（タップで再利用）</label><div class="picker">${items}</div></div>`;
+  }
   function body(){
     const colors=PALETTE.map(col=>`<button data-col="${col}" class="${draft.color===col?'sel':''}" style="background:${col}"></button>`).join("");
     return `
@@ -372,6 +384,7 @@ function openCharSheet(charId){
         画像を選択<input type="file" accept="image/*" id="cImg" style="display:none"></label>
       ${draft.img?'<button class="btn del" id="cImgClr">画像消去</button>':''}
     </div>
+    ${libGalleryHTML()}
     <div class="field"><label>名前検索（タップで設定 / ひらがな可）</label>
       <input type="text" id="cSearch" placeholder="ほしの / ホシ など">
       <div class="results" id="cResults"></div></div>
@@ -396,9 +409,25 @@ function openCharSheet(charId){
         ? list.map(n=>`<button type="button" class="nameChip ${draft.name===n?'sel':''}" data-name="${escapeHTML(n)}">${escapeHTML(n)}</button>`).join("")
         : '<span style="color:var(--sub);font-size:12px">該当なし。下の「キャラ名」に直接入力してください</span>';
       rEl.querySelectorAll("[data-name]").forEach(b=>b.onclick=()=>{
-        sync(); draft.name=b.dataset.name; if(!draft.text) draft.text=b.dataset.name.slice(0,2); refresh(); });
+        sync(); const nm=b.dataset.name; draft.name=nm; if(!draft.text) draft.text=nm.slice(0,2);
+        // 同名で保存済み画像があれば自動復元
+        if(!draft.img && state.imgLib && state.imgLib[nm]) draft.img=state.imgLib[nm];
+        refresh(); });
     }
     sEl.oninput=renderResults; renderResults();
+
+    // 保存済みアイコンの再利用 / 削除
+    sheet.querySelectorAll("[data-lib]").forEach(b=>b.onclick=(e)=>{
+      if(e.target.hasAttribute("data-libdel")) return;
+      sync(); const k=b.dataset.lib; draft.img=state.imgLib[k];
+      if(!draft.name) draft.name=k; if(!draft.text) draft.text=k.slice(0,2); refresh(); });
+    sheet.querySelectorAll("[data-libdel]").forEach(x=>x.onclick=(e)=>{
+      e.stopPropagation(); const k=x.dataset.libdel;
+      if(confirm("保存済みアイコン「"+k+"」を一覧から削除しますか？")){ delete state.imgLib[k]; save(); refresh(); } });
+
+    // 名前を直接入力したときも、同名の保存済み画像があれば復元
+    const nameEl=sheet.querySelector("#cName"); if(nameEl) nameEl.onblur=()=>{ sync();
+      if(!draft.img && draft.name && state.imgLib && state.imgLib[draft.name]){ draft.img=state.imgLib[draft.name]; refresh(); } };
 
     sheet.querySelectorAll("[data-col]").forEach(b=>b.onclick=()=>{ draft.color=b.dataset.col; sync(); refresh(); });
     sheet.querySelector("#cImg").onchange=e=>{ const f=e.target.files[0]; if(!f) return;
@@ -411,6 +440,8 @@ function openCharSheet(charId){
     sheet.querySelector("#cCancel").onclick=closeSheet;
     sheet.querySelector("#cSave").onclick=()=>{ sync();
       if(!draft.name && !draft.text && !draft.img){ alert("名前かアイコン文字を入力してください"); return; }
+      // アップした画像は名前をキーにライブラリへ保存（次回同名で自動復元・他キャラでも再利用）
+      if(draft.img && draft.name){ state.imgLib=state.imgLib||{}; state.imgLib[draft.name]=draft.img; }
       if(isNew) state.characters.push(draft); else Object.assign(c, draft);
       save(); render(); closeSheet(); };
   }
