@@ -55,7 +55,7 @@
 
 ### 仕組み・トラブル時
 
-- 取得元: bluearchive.wikiru.jp「全キャラクター一覧」
-- 抽出名が 100 件未満だとスクリプトが失敗し、Actions が赤くなる（wiki の構造変更のサイン）
+- 取得元: SchaleDB（`https://schaledb.com/data/jp/students.min.json`）
+- 取得名が 100 件未満だとスクリプトが失敗し、Actions が赤くなる（データ形式変更のサイン）
   → その場合は `scripts/update-chars.mjs` の抽出ロジックを見直す
 - 手動でも更新可能: ローカルで `node scripts/update-chars.mjs` 実行後にコミット

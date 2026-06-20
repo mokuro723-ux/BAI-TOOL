@@ -46,9 +46,11 @@ docs/
 
 - `index.html` 内のキャラ名は `/* CHAR_NAMES:START */` ～ `/* CHAR_NAMES:END */` で囲まれた行。
   **このマーカーを壊さないこと**（スクリプトがこの範囲だけ置換する）。
-- 取得元は bluearchive.wikiru.jp「全キャラクター一覧」。`title="名前_icon.png"` を手がかりに抽出。
+- 取得元は SchaleDB の JP データ（`https://schaledb.com/data/jp/students.min.json`）。
+  `IsReleased[0]`（JP 実装済み）の `Name` を採用。
+  ※ wiki は GitHub のIPに JS チャレンジを返し CI から取得できなかったため SchaleDB に変更した。
 - 手動更新は `node scripts/update-chars.mjs`。GitHub Actions が毎月1日に自動実行＆コミットする。
-- wiki の構造変更で抽出名が 100 件未満になった場合はスクリプトが中断（誤って空リストを書かない安全装置）。
+- 取得名が 100 件未満になった場合はスクリプトが中断（誤って空リストを書かない安全装置）。
 
 **実装の詳細仕様は [docs/SPEC.md](docs/SPEC.md) を参照**。コードを書く前に必ず読むこと。
 
