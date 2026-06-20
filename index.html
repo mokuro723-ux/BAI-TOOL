@@ -33,6 +33,16 @@
   .hroster::-webkit-scrollbar{display:none;}
   .hroster .empty{color:var(--sub); font-size:12px; padding:4px;}
 
+  /* header: undo/redo + PinP余白トグル */
+  .hicon{height:36px; width:36px; padding:0; border:none; border-radius:9px;
+    background:var(--panel2); color:var(--txt); font-size:17px; flex:0 0 auto;
+    display:flex; align-items:center; justify-content:center;}
+  .hicon:active{background:var(--line);}
+  .hicon:disabled{opacity:.35;}
+  .hicon.act{background:var(--accent); color:#fff;}
+  #pinpSpacer{height:0; flex:0 0 auto; transition:height .15s ease;}
+  #pinpSpacer.on{height:300px;}
+
   /* table */
   .thead, .trow{display:flex; align-items:stretch; border-bottom:1px solid var(--line);}
   .thead{background:var(--panel2); color:var(--sub); font-size:11px; font-weight:700;}
@@ -140,10 +150,15 @@
   <div class="htop">
     <button class="hbtn" id="btnDocs">☰ TL</button>
     <input id="title" placeholder="タイトル（例: ホバークラフト TMT 2凸 前半）">
+    <button class="hicon" id="btnPinpGap" title="PinP用の余白を表示/非表示">⬓</button>
     <button class="hbtn" id="btnRoster">キャラ</button>
+    <button class="hicon" id="btnUndo" title="元に戻す">↶</button>
+    <button class="hicon" id="btnRedo" title="やり直し">↷</button>
   </div>
   <div class="hroster" id="hroster"></div>
 </header>
+
+<div id="pinpSpacer"></div>
 
 <div class="thead">
   <div class="c-num">コスト</div>
@@ -255,6 +270,44 @@ let saveTimer=null;
 function save(){ if(state) state.updatedAt=Date.now(); clearTimeout(saveTimer); saveTimer=setTimeout(()=>{
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(store)); }catch(e){ alert("保存に失敗（容量不足の可能性）"); } }, 120); }
 const rosterById = id => state.roster.find(c=>c.id===id);
+
+/* ===== undo/redo =====
+   操作ボタン（行追加・削除・複製・移動・セル削除・キャラ配置・タイトル確定など）の
+   実行前に snapshotHistory() でスナップショットを積む。
+   表示中の TL（state＝doc）単位の履歴。TL を切り替えたら履歴はリセットする。 */
+const HISTORY_LIMIT = 50;
+let undoStack=[], redoStack=[];
+function snapshotDoc(){ return JSON.stringify({ title:state.title, roster:state.roster, rows:state.rows, activeId:state.activeId }); }
+function snapshotHistory(){
+  if(!state) return;
+  undoStack.push(snapshotDoc());
+  if(undoStack.length>HISTORY_LIMIT) undoStack.shift();
+  redoStack=[];
+  updateUndoRedoButtons();
+}
+function resetHistory(){ undoStack=[]; redoStack=[]; updateUndoRedoButtons(); }
+function applySnapshot(json){
+  const d=JSON.parse(json);
+  state.title=d.title; state.roster=d.roster; state.rows=d.rows; state.activeId=d.activeId;
+}
+function undo(){
+  if(!undoStack.length) return;
+  redoStack.push(snapshotDoc());
+  applySnapshot(undoStack.pop());
+  save(); render(); updateUndoRedoButtons();
+}
+function redo(){
+  if(!redoStack.length) return;
+  undoStack.push(snapshotDoc());
+  applySnapshot(redoStack.pop());
+  save(); render(); updateUndoRedoButtons();
+}
+function updateUndoRedoButtons(){
+  const bu=document.getElementById("btnUndo"), br=document.getElementById("btnRedo");
+  if(bu) bu.disabled = !undoStack.length;
+  if(br) br.disabled = !redoStack.length;
+}
+
 // コスト表示: 整数のみ丸数字に（7→⑦）。小数・「即」などはそのまま
 function circledCost(s){ s=(s==null?"":String(s)).trim(); if(!/^\d+$/.test(s)) return s;
   const n=parseInt(s,10); if(n===0) return "⓪"; if(n>=1&&n<=20) return String.fromCharCode(0x2460+n-1); return s; }
@@ -274,6 +327,7 @@ function render(){
   document.getElementById("title").value = state.title||"";
   renderRosterBars();
   renderTable();
+  updateUndoRedoButtons();
 }
 function renderRosterBars(){
   const top=document.getElementById("hroster"), bar=document.getElementById("barroster");
@@ -304,12 +358,12 @@ function buildRow(row){
   const cells=document.createElement("div"); cells.className="cellwrap c-cells";
   const memo=document.createElement("input"); memo.className="c-memo"; memo.value=row.memo;
   // コスト欄: 入力中は生の値、フォーカスを外すと丸数字表示
-  num.onfocus=()=>{ num.value=row.num; setActive(row.id); };
+  num.onfocus=()=>{ num.value=row.num; setActive(row.id); snapshotHistory(); };
   num.oninput=()=>{ row.num=num.value; save(); };
   num.onblur=()=>{ num.value=circledCost(row.num); };
   time.oninput=()=>{ row.time=time.value; save(); };
   memo.oninput=()=>{ row.memo=memo.value; save(); };
-  [time,memo].forEach(inp=> inp.addEventListener("focus",()=>setActive(row.id)) );
+  [time,memo].forEach(inp=> inp.addEventListener("focus",()=>{ setActive(row.id); snapshotHistory(); }) );
   cells.addEventListener("click",()=>setActive(row.id));
   el.append(num,time,cells,memo);
   renderCells(row, cells);
@@ -342,6 +396,7 @@ function activeRow(){ return state.rows.find(r=>r.id===state.activeId) || state.
 function placeChar(charId){
   if(!state.roster.length){ openCharSheet(null); return; }
   const row=activeRow(); if(!row) return;
+  snapshotHistory();
   row.cells.push({ charId, badge:null, mark:null }); save(); refreshRowCells(row);
 }
 function attachFlick(el, row, idx){
@@ -350,17 +405,17 @@ function attachFlick(el, row, idx){
   el.addEventListener("touchend",e=>{ const t=e.changedTouches[0]; gesture(row, idx, t.clientX-sx, t.clientY-sy); });
   // PC確認用フォールバック（タップ＝枠色切替、右クリック＝削除）
   el.addEventListener("click",()=>{ if(!('ontouchstart' in window)) cycleRing(row,idx); });
-  el.addEventListener("contextmenu",e=>{ e.preventDefault(); row.cells.splice(idx,1); save(); refreshRowCells(row); });
+  el.addEventListener("contextmenu",e=>{ e.preventDefault(); snapshotHistory(); row.cells.splice(idx,1); save(); refreshRowCells(row); });
 }
 function bumpBadge(row,idx,d){ const c=row.cells[idx]; if(!c) return;
-  c.badge=(c.badge||0)+d; if(c.badge<=0) c.badge=null; save(); refreshRowCells(row); }
+  snapshotHistory(); c.badge=(c.badge||0)+d; if(c.badge<=0) c.badge=null; save(); refreshRowCells(row); }
 function cycleRing(row,idx){ const c=row.cells[idx]; if(!c) return;
-  const i=RING_COLORS.indexOf(c.ring||""); c.ring=RING_COLORS[(i+1)%RING_COLORS.length]||null; save(); refreshRowCells(row); }
+  snapshotHistory(); const i=RING_COLORS.indexOf(c.ring||""); c.ring=RING_COLORS[(i+1)%RING_COLORS.length]||null; save(); refreshRowCells(row); }
 function toggleMark(row,idx){ const c=row.cells[idx]; if(!c) return;
-  c.mark = c.mark ? null : "←"; save(); refreshRowCells(row); }
+  snapshotHistory(); c.mark = c.mark ? null : "←"; save(); refreshRowCells(row); }
 function deleteLastCell(){
   const row=activeRow(); if(!row || !row.cells.length) return;
-  row.cells.pop(); save(); refreshRowCells(row);
+  snapshotHistory(); row.cells.pop(); save(); refreshRowCells(row);
 }
 function gesture(row, idx, dx, dy){
   const TH=22, adx=Math.abs(dx), ady=Math.abs(dy);
@@ -386,10 +441,12 @@ function scrollRowIntoView(rowId){
   });
 }
 document.getElementById("btnAddRow").onclick=()=>{
+  snapshotHistory();
   const r=newRow(); state.rows.push(r); state.activeId=r.id; save(); renderTable();
   scrollRowIntoView(r.id);
 };
 document.getElementById("btnDelRow").onclick=()=>{
+  snapshotHistory();
   if(state.rows.length<=1){ const r=activeRow(); r.num=r.time=r.memo=""; r.cells=[]; save(); renderTable(); return; }
   const i=state.rows.findIndex(r=>r.id===state.activeId); if(i<0) return;
   state.rows.splice(i,1); state.activeId=(state.rows[i]||state.rows[i-1]).id; save(); renderTable();
@@ -397,16 +454,35 @@ document.getElementById("btnDelRow").onclick=()=>{
 document.getElementById("btnDelCell").onclick=deleteLastCell;
 document.getElementById("btnDup").onclick=()=>{
   const i=state.rows.findIndex(r=>r.id===state.activeId); if(i<0) return;
+  snapshotHistory();
   const src=state.rows[i]; const cp=JSON.parse(JSON.stringify(src)); cp.id=uid();
   state.rows.splice(i+1,0,cp); state.activeId=cp.id; save(); renderTable();
 };
 document.getElementById("btnUp").onclick=()=>moveRow(-1);
 document.getElementById("btnDown").onclick=()=>moveRow(1);
 function moveRow(d){ const i=state.rows.findIndex(r=>r.id===state.activeId); const j=i+d;
-  if(i<0||j<0||j>=state.rows.length) return; const a=state.rows; [a[i],a[j]]=[a[j],a[i]]; save(); renderTable(); }
+  if(i<0||j<0||j>=state.rows.length) return; snapshotHistory(); const a=state.rows; [a[i],a[j]]=[a[j],a[i]]; save(); renderTable(); }
 
 /* ===== title ===== */
 document.getElementById("title").oninput=e=>{ state.title=e.target.value; save(); };
+
+/* ===== undo/redo buttons ===== */
+document.getElementById("btnUndo").onclick=undo;
+document.getElementById("btnRedo").onclick=redo;
+
+/* ===== PinP余白トグル =====
+   ピクチャインピクチャ動画を画面上部に重ねて見ながら記録する際、
+   最初の数行が動画に隠れないよう、ワンタップでヘッダー下に空白を出し入れする。
+   TLデータとは無関係の表示設定なので、docではなく端末localStorageに単独保存する。 */
+const PINP_KEY = "bai-tool-pinp-gap";
+const pinpSpacer=document.getElementById("pinpSpacer"), btnPinpGap=document.getElementById("btnPinpGap");
+function setPinpGap(on){
+  pinpSpacer.classList.toggle("on", on);
+  btnPinpGap.classList.toggle("act", on);
+  try{ localStorage.setItem(PINP_KEY, on ? "1" : "0"); }catch(e){}
+}
+btnPinpGap.onclick=()=> setPinpGap(!pinpSpacer.classList.contains("on"));
+setPinpGap(localStorage.getItem(PINP_KEY)==="1");
 
 /* ===== sheets ===== */
 const mask=document.getElementById("mask"), sheet=document.getElementById("sheet");
@@ -536,7 +612,7 @@ function imageUrlToDataUrl(url, cb, onerr){
 }
 
 /* ===== documents (複数TL) ===== */
-function switchDoc(id){ const d=store.docs.find(x=>x.id===id); if(!d) return; store.currentId=id; state=d; save(); render(); closeSheet(); }
+function switchDoc(id){ const d=store.docs.find(x=>x.id===id); if(!d) return; store.currentId=id; state=d; resetHistory(); save(); render(); closeSheet(); }
 function fmtDate(ts){ if(!ts) return ""; const d=new Date(ts); const p=n=>String(n).padStart(2,"0");
   return `${d.getMonth()+1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`; }
 document.getElementById("btnDocs").onclick=()=>{
