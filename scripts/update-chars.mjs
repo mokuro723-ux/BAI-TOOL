@@ -29,8 +29,11 @@ function buildList(names) {
   return [...new Set([...baseArr, ...verArr])];
 }
 
-async function main() {
-  // wiki 側 WAF が非ブラウザ UA / Accept 無しを 415 で弾くため、ブラウザ同等のヘッダを送る
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// wiki から取得して名前リストを返す（1回分）
+async function fetchNames() {
+  // 非ブラウザ UA / Accept 無しは WAF に 415 で弾かれるため、ブラウザ同等のヘッダを送る
   const res = await fetch(SRC_URL, {
     headers: {
       "User-Agent":
@@ -39,20 +42,31 @@ async function main() {
       "Accept-Language": "ja,en-US;q=0.8,en;q=0.6",
     },
   });
-  if (!res.ok) throw new Error(`fetch failed: HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status} (${res.headers.get("content-type")})`);
   const html = await res.text();
-
-  // 各キャラのアイコン画像 title="名前_icon.png" を手がかりに名前を抽出
   const matches = [...html.matchAll(/title="([^"]*?)_icon\.png"/g)].map((m) => m[1]);
   const list = buildList([...new Set(matches)]);
-
+  // データセンターIPには稀にボット対策ページが返るため、名前数で正否を判定
   if (list.length < 100) {
-    console.error("--- diagnostics ---");
-    console.error("status:", res.status, "content-type:", res.headers.get("content-type"));
-    console.error("html length:", html.length);
-    console.error("snippet:", html.slice(0, 500).replace(/\s+/g, " "));
-    throw new Error(`abort: extracted only ${list.length} names (wiki structure may have changed)`);
+    throw new Error(`only ${list.length} names extracted (html ${html.length}B, snippet: ${html.slice(0, 200).replace(/\s+/g, " ")})`);
   }
+  return list;
+}
+
+async function main() {
+  // 断続的なボット対策ページ対策として最大3回リトライ
+  let list, lastErr;
+  for (let i = 1; i <= 3; i++) {
+    try {
+      list = await fetchNames();
+      break;
+    } catch (e) {
+      lastErr = e;
+      console.error(`attempt ${i} failed: ${e.message}`);
+      if (i < 3) await sleep(5000);
+    }
+  }
+  if (!list) throw new Error(`giving up after 3 attempts: ${lastErr && lastErr.message}`);
 
   const src = readFileSync(HTML_PATH, "utf8");
   const s = src.indexOf(START);
