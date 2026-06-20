@@ -60,9 +60,9 @@
     border-radius:8px; background:#000a; color:#fff; font-size:10px; font-weight:700;
     line-height:15px; text-align:center;}
 
-  /* avatar (角丸四角・既定の外枠は白) */
+  /* avatar (角丸四角・既定の外枠は黒) */
   .av{border-radius:6px; flex:0 0 auto; display:flex; align-items:center; justify-content:center;
-    font-weight:700; color:#fff; overflow:hidden; border:2px solid #ffffff;}
+    font-weight:700; color:#fff; overflow:hidden; border:2px solid #000000;}
   .av img{width:100%; height:100%; object-fit:cover;}
   .av.r{width:36px; height:36px; font-size:12px;}
   .av.lg{width:52px; height:52px; font-size:16px;}
@@ -143,7 +143,7 @@
 </header>
 
 <div class="thead">
-  <div class="c-num">数字</div>
+  <div class="c-num">コスト</div>
   <div class="c-time">タイム</div>
   <div class="c-cells">キャラ配置</div>
   <div class="c-memo">メモ</div>
@@ -157,11 +157,11 @@
 <div class="bar">
   <div class="hint" id="hint">下のキャラ＝選択中の行に配置 ／ 置いたアイコン: タップ＝枠色, 上＝+1, 下＝-1, 右＝+3, 左＝削除</div>
   <div class="barbtns">
-    <button class="bb act" id="btnAddRow">＋ 行を追加</button>
+    <button class="bb act" id="btnAddRow">＋行</button>
     <button class="bb sub" id="btnUp" title="上へ">▲</button>
     <button class="bb sub" id="btnDown" title="下へ">▼</button>
-    <button class="bb sub" id="btnDup" title="複製">⧉</button>
-    <button class="bb sub" id="btnDelRow" title="行削除" style="color:var(--danger)">🗑</button>
+    <button class="bb" id="btnDup">行複製</button>
+    <button class="bb" id="btnDelRow" style="color:var(--danger)">行削除</button>
   </div>
   <div class="barroster" id="barroster"></div>
 </div>
@@ -217,6 +217,9 @@ let saveTimer=null;
 function save(){ if(state) state.updatedAt=Date.now(); clearTimeout(saveTimer); saveTimer=setTimeout(()=>{
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(store)); }catch(e){ alert("保存に失敗（容量不足の可能性）"); } }, 120); }
 const rosterById = id => state.roster.find(c=>c.id===id);
+// コスト表示: 整数のみ丸数字に（7→⑦）。小数・「即」などはそのまま
+function circledCost(s){ s=(s==null?"":String(s)).trim(); if(!/^\d+$/.test(s)) return s;
+  const n=parseInt(s,10); if(n===0) return "⓪"; if(n>=1&&n<=20) return String.fromCharCode(0x2460+n-1); return s; }
 function escapeHTML(s){ return (s||"").replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
 
 /* ===== avatar ===== */
@@ -257,22 +260,25 @@ function renderTable(){
 function buildRow(row){
   const el=document.createElement("div"); el.className="trow"+(row.id===state.activeId?" active":"");
   el.dataset.row=row.id;
-  const num=document.createElement("input"); num.className="c-num"; num.value=row.num; num.placeholder="";
+  const num=document.createElement("input"); num.className="c-num"; num.value=circledCost(row.num); num.placeholder="";
   num.setAttribute("inputmode","text");
   const time=document.createElement("input"); time.className="c-time"; time.value=row.time; time.setAttribute("inputmode","numeric");
   const cells=document.createElement("div"); cells.className="cellwrap c-cells";
   const memo=document.createElement("input"); memo.className="c-memo"; memo.value=row.memo;
+  // コスト欄: 入力中は生の値、フォーカスを外すと丸数字表示
+  num.onfocus=()=>{ num.value=row.num; setActive(row.id); };
   num.oninput=()=>{ row.num=num.value; save(); };
+  num.onblur=()=>{ num.value=circledCost(row.num); };
   time.oninput=()=>{ row.time=time.value; save(); };
   memo.oninput=()=>{ row.memo=memo.value; save(); };
-  [num,time,memo].forEach(inp=> inp.addEventListener("focus",()=>setActive(row.id)) );
+  [time,memo].forEach(inp=> inp.addEventListener("focus",()=>setActive(row.id)) );
   cells.addEventListener("click",()=>setActive(row.id));
   el.append(num,time,cells,memo);
   renderCells(row, cells);
   return el;
 }
-/* セル枠色（スキル対象の判別用）。"" = 既定（白）。タップで順送り */
-const RING_COLORS = ["", "#ff3b3b", "#ffd400", "#39ff14", "#00d0ff", "#ff2bd6", "#ff8a00", "#1a1a1a"];
+/* セル枠色（スキル対象の判別用）。"" = 既定（黒）。タップで順送り */
+const RING_COLORS = ["", "#ffffff", "#ff3b3b", "#ffd400", "#39ff14", "#00d0ff", "#ff2bd6", "#ff8a00"];
 function renderCells(row, wrap){
   wrap.innerHTML="";
   row.cells.forEach((cell,idx)=>{
@@ -481,7 +487,7 @@ document.getElementById("btnDocs").onclick=()=>{
     return `<div class="mgrItem">
       <span class="name">${cur?'● ':''}${escapeHTML(d.title||"無題")}<br><small style="color:var(--sub)">${fmtDate(d.updatedAt)} ・ ${d.rows.filter(r=>r.cells.length||r.num||r.time||r.memo).length}行</small></span>
       <button data-open="${d.id}">開く</button>
-      <button data-dup="${d.id}">複製</button>
+      <button data-export="${d.id}">保存</button>
       <button data-del="${d.id}" style="color:var(--danger)">削除</button>
     </div>`; }).join("");
   openSheet(`<h2>TL一覧（${store.docs.length}）</h2>
@@ -491,11 +497,7 @@ document.getElementById("btnDocs").onclick=()=>{
   sheet.querySelector("#dNew").onclick=()=>{ const d=newDoc(""); store.docs.push(d); switchDoc(d.id); };
   sheet.querySelector("#dClose").onclick=closeSheet;
   sheet.querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>switchDoc(b.dataset.open));
-  sheet.querySelectorAll("[data-dup]").forEach(b=>b.onclick=()=>{
-    const src=store.docs.find(x=>x.id===b.dataset.dup); const cp=JSON.parse(JSON.stringify(src));
-    cp.id=uid(); cp.title=(src.title||"無題")+" のコピー"; cp.updatedAt=Date.now();
-    cp.rows.forEach(r=>r.id=uid()); cp.activeId=cp.rows[cp.rows.length-1].id;
-    store.docs.push(cp); switchDoc(cp.id); });
+  sheet.querySelectorAll("[data-export]").forEach(b=>b.onclick=()=>{ switchDoc(b.dataset.export); exportPNG(); });
   sheet.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{
     if(store.docs.length<=1){ alert("最後の1件は削除できません"); return; }
     const d=store.docs.find(x=>x.id===b.dataset.del);
@@ -537,7 +539,7 @@ function exportPNG(){
     // header row
     const hy=top; ctx.fillStyle="#222845"; ctx.fillRect(0,hy,W,26);
     ctx.fillStyle="#9aa3c7"; ctx.font="bold 12px sans-serif"; ctx.textBaseline="middle";
-    ctx.fillText("数字", pad+8, hy+13); ctx.fillText("タイム", pad+NUM+8, hy+13);
+    ctx.fillText("コスト", pad+8, hy+13); ctx.fillText("タイム", pad+NUM+8, hy+13);
     ctx.fillText("キャラ配置", cellsX+6, hy+13); ctx.fillText("メモ", W-MEMO+6, hy+13);
     let y=hy+26;
     rows.forEach((r,ri)=>{
@@ -547,7 +549,7 @@ function exportPNG(){
       const cy=y+h/2;
       ctx.textBaseline="middle";
       ctx.fillStyle="#eef1ff"; ctx.font="bold 16px sans-serif"; ctx.textAlign="center";
-      if(r.num) ctx.fillText(r.num, pad+NUM/2, cy);
+      if(r.num) ctx.fillText(circledCost(r.num), pad+NUM/2, cy);
       ctx.fillStyle="#5b8cff"; if(r.time) ctx.fillText(r.time, pad+NUM+TIME/2, cy);
       // cells
       r.cells.forEach((cell,i)=>{ const line=Math.floor(i/perLine), col=i%perLine;
@@ -589,7 +591,7 @@ function drawAvatar(ctx,c,x,cy,r,imgs,ring){
   else{ ctx.fillStyle="#fff"; ctx.font="bold "+Math.round(r*0.8)+"px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
     ctx.fillText((c?(c.text||c.name||"?"):"?").slice(0,2), x, cy); }
   ctx.restore();
-  ctx.lineWidth=ring?3:2; ctx.strokeStyle=ring||"#ffffff"; rrect(ctx,X,Y,s,s,rad); ctx.stroke();
+  ctx.lineWidth=ring?3:2; ctx.strokeStyle=ring||"#000000"; rrect(ctx,X,Y,s,s,rad); ctx.stroke();
 }
 function wrap(s,n){ const out=[]; (s||"").split("\n").forEach(line=>{ while(line.length>n){ out.push(line.slice(0,n)); line=line.slice(n);} out.push(line); }); return out; }
 
