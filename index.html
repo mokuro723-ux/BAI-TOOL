@@ -37,10 +37,10 @@
   .thead, .trow{display:flex; align-items:stretch; border-bottom:1px solid var(--line);}
   .thead{background:var(--panel2); color:var(--sub); font-size:11px; font-weight:700;}
   .thead>div{padding:5px 4px; display:flex; align-items:center;}
-  .c-num{flex:0 0 40px; border-right:1px solid var(--line);}
-  .c-time{flex:0 0 52px; border-right:1px solid var(--line);}
+  .c-num{flex:0 0 38px; border-right:1px solid var(--line);}
+  .c-time{flex:0 0 50px; border-right:1px solid var(--line);}
   .c-cells{flex:1 1 auto; min-width:0; border-right:1px solid var(--line);}
-  .c-memo{flex:0 0 92px;}
+  .c-memo{flex:0 0 128px;}
 
   .trow{background:var(--panel); min-height:40px;}
   .trow.active{background:var(--active);}
@@ -155,7 +155,7 @@
 
 <!-- bottom bar -->
 <div class="bar">
-  <div class="hint" id="hint">アイコンをタップ＝選択中の行に配置 ／ 置いたアイコンをフリック: 上下＝数字, 左＝削除, 右＝複製</div>
+  <div class="hint" id="hint">下のキャラ＝選択中の行に配置 ／ 置いたアイコン: タップ＝枠色, 上下フリック＝数字, 左＝削除, 右＝複製</div>
   <div class="barbtns">
     <button class="bb act" id="btnAddRow">＋ 行を追加</button>
     <button class="bb sub" id="btnUp" title="上へ">▲</button>
@@ -257,12 +257,15 @@ function buildRow(row){
   renderCells(row, cells);
   return el;
 }
+/* セル枠色（スキル対象の判別用）。"" = 枠なし。タップで順送り */
+const RING_COLORS = ["", "#ffffff", "#ff3b3b", "#ffd400", "#39ff14", "#00d0ff", "#ff2bd6", "#ff8a00"];
 function renderCells(row, wrap){
   wrap.innerHTML="";
   row.cells.forEach((cell,idx)=>{
     const c=rosterById(cell.charId);
     const d=document.createElement("div"); d.className="cell";
     d.innerHTML=avatarHTML(c,"")+(cell.badge?`<span class="cbadge">${escapeHTML(String(cell.badge))}</span>`:"");
+    if(cell.ring){ const av=d.querySelector(".av"); if(av){ av.style.borderColor=cell.ring; av.style.borderWidth="3px"; } }
     attachFlick(d, row, idx);
     wrap.appendChild(d);
   });
@@ -287,19 +290,21 @@ function attachFlick(el, row, idx){
   let sx=0, sy=0;
   el.addEventListener("touchstart",e=>{ const t=e.touches[0]; sx=t.clientX; sy=t.clientY; },{passive:true});
   el.addEventListener("touchend",e=>{ const t=e.changedTouches[0]; gesture(row, idx, t.clientX-sx, t.clientY-sy); });
-  // PC確認用フォールバック
-  el.addEventListener("click",()=>{ if(!('ontouchstart' in window)) bumpBadge(row,idx,1); });
+  // PC確認用フォールバック（タップ＝枠色切替、右クリック＝削除）
+  el.addEventListener("click",()=>{ if(!('ontouchstart' in window)) cycleRing(row,idx); });
   el.addEventListener("contextmenu",e=>{ e.preventDefault(); row.cells.splice(idx,1); save(); refreshRowCells(row); });
 }
 function bumpBadge(row,idx,d){ const c=row.cells[idx]; if(!c) return;
   c.badge=(c.badge||0)+d; if(c.badge<=0) c.badge=null; save(); refreshRowCells(row); }
+function cycleRing(row,idx){ const c=row.cells[idx]; if(!c) return;
+  const i=RING_COLORS.indexOf(c.ring||""); c.ring=RING_COLORS[(i+1)%RING_COLORS.length]||null; save(); refreshRowCells(row); }
 function gesture(row, idx, dx, dy){
   const TH=22, adx=Math.abs(dx), ady=Math.abs(dy);
-  if(adx<TH && ady<TH) return; // タップは無反応（誤削除防止）
+  if(adx<TH && ady<TH){ cycleRing(row, idx); return; } // タップ＝枠色（スキル対象の判別）
   const cell=row.cells[idx]; if(!cell) return;
   if(ady>=adx){ bumpBadge(row, idx, dy<0?1:-1); }
   else if(dx<0){ row.cells.splice(idx,1); save(); refreshRowCells(row); }
-  else { row.cells.splice(idx+1,0,{charId:cell.charId, badge:cell.badge}); save(); refreshRowCells(row); }
+  else { row.cells.splice(idx+1,0,{charId:cell.charId, badge:cell.badge, ring:cell.ring}); save(); refreshRowCells(row); }
 }
 
 /* ===== row ops ===== */
@@ -384,7 +389,8 @@ function openCharSheet(charId){
   }
   function sync(){ const n=sheet.querySelector("#cName"), t=sheet.querySelector("#cText");
     if(n) draft.name=n.value; if(t) draft.text=t.value; }
-  function refresh(){ sync(); openSheet(body()); bind(); }
+  // refresh は sync しない（呼び出し側が draft を確定済み。ここで再 sync すると選択が古い入力値で上書きされる）
+  function refresh(){ openSheet(body()); bind(); }
   function bind(){
     const sEl=sheet.querySelector("#cSearch"), rEl=sheet.querySelector("#cResults");
     function renderResults(){
@@ -403,12 +409,12 @@ function openCharSheet(charId){
       if(e.target.hasAttribute("data-libdel")) return;
       sync(); const k=b.dataset.lib; draft.img=state.imgLib[k];
       if(!draft.name) draft.name=k; if(!draft.text) draft.text=k.slice(0,2); refresh(); });
-    sheet.querySelectorAll("[data-libdel]").forEach(x=>x.onclick=(e)=>{ e.stopPropagation(); const k=x.dataset.libdel;
+    sheet.querySelectorAll("[data-libdel]").forEach(x=>x.onclick=(e)=>{ e.stopPropagation(); sync(); const k=x.dataset.libdel;
       if(confirm("保存済みアイコン「"+k+"」を一覧から削除しますか？")){ delete state.imgLib[k]; save(); refresh(); } });
     const nameEl=sheet.querySelector("#cName"); if(nameEl) nameEl.onblur=()=>{ sync();
       if(!draft.img && draft.name && state.imgLib && state.imgLib[draft.name]){ draft.img=state.imgLib[draft.name]; refresh(); } };
     sheet.querySelectorAll("[data-col]").forEach(b=>b.onclick=()=>{ draft.color=b.dataset.col; sync(); refresh(); });
-    sheet.querySelector("#cImg").onchange=e=>{ const f=e.target.files[0]; if(!f) return;
+    sheet.querySelector("#cImg").onchange=e=>{ sync(); const f=e.target.files[0]; if(!f) return;
       resizeImage(f, d=>{ draft.img=d; refresh(); }); };
     const clr=sheet.querySelector("#cImgClr"); if(clr) clr.onclick=()=>{ draft.img=null; refresh(); };
     const del=sheet.querySelector("#cDel"); if(del) del.onclick=()=>{
@@ -481,6 +487,7 @@ function exportPNG(){
       r.cells.forEach((cell,i)=>{ const line=Math.floor(i/perLine), col=i%perLine;
         const x=cellsX+col*(IC+GAP)+IC/2, yy=y+8+line*(IC+8)+IC/2;
         drawAvatar(ctx, rosterById(cell.charId), x, yy, IC/2, imgs);
+        if(cell.ring){ ctx.strokeStyle=cell.ring; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(x,yy,IC/2-1,0,Math.PI*2); ctx.stroke(); }
         if(cell.badge){ ctx.fillStyle="#000a"; ctx.beginPath(); ctx.arc(x+IC/2-4,yy+IC/2-4,9,0,7); ctx.fill();
           ctx.fillStyle="#fff"; ctx.font="bold 12px sans-serif"; ctx.textAlign="center"; ctx.fillText(String(cell.badge),x+IC/2-4,yy+IC/2-4); }
       });
@@ -489,10 +496,23 @@ function exportPNG(){
         wrap(r.memo,18).slice(0,3).forEach((ln,k)=> ctx.fillText(ln, W-MEMO+6, cy-((Math.min(3,wrap(r.memo,18).length)-1)*9)+k*18)); }
       y+=h;
     });
-    finish(cv);
+    showResult(cv);
   };
   if(!toLoad.length) draw();
   else{ let n=0; const done=()=>{ if(++n>=toLoad.length) draw(); }; toLoad.forEach(im=>{ im.complete?done():(im.onload=done,im.onerror=done); }); }
+}
+// iOS Safari は非同期の window.open/ダウンロードを弾くため、画像をその場に表示して保存させる
+function showResult(cv){
+  let dataUrl; try{ dataUrl=cv.toDataURL("image/png"); }catch(e){ alert("画像化に失敗しました: "+e.message); return; }
+  const fname=(state.title||"bai-tl").replace(/[\\/:*?"<>|]/g,"_")+".png";
+  openSheet(`<h2>TL画像</h2>
+    <p style="font-size:12px;color:var(--sub);margin:0 0 10px">iPhone: 画像を長押し →「"写真"に保存」。PC: 下のダウンロード。</p>
+    <img src="${dataUrl}" style="width:100%;border-radius:8px;border:1px solid var(--line);display:block">
+    <div class="sheet-actions">
+      <a class="btn primary" href="${dataUrl}" download="${escapeHTML(fname)}" style="display:flex;align-items:center;justify-content:center;text-decoration:none">ダウンロード</a>
+      <button class="btn ghost" id="exClose">閉じる</button>
+    </div>`);
+  sheet.querySelector("#exClose").onclick=closeSheet;
 }
 function drawAvatar(ctx,c,x,cy,r,imgs){
   ctx.save(); ctx.beginPath(); ctx.arc(x,cy,r,0,Math.PI*2); ctx.fillStyle=c?c.color:"#444"; ctx.fill();
@@ -500,14 +520,6 @@ function drawAvatar(ctx,c,x,cy,r,imgs){
   else{ ctx.fillStyle="#fff"; ctx.font="bold "+Math.round(r*0.8)+"px sans-serif"; ctx.textAlign="center";
     ctx.fillText((c?(c.text||c.name||"?"):"?").slice(0,2), x, cy); }
   ctx.restore();
-}
-function finish(cv){
-  cv.toBlob(blob=>{ const url=URL.createObjectURL(blob); const a=document.createElement("a");
-    a.href=url; a.download=(state.title||"bai-tl")+".png";
-    const isIOS=/iP(hone|ad|od)/.test(navigator.platform)||(navigator.userAgent.includes("Mac")&&"ontouchend"in document);
-    if(isIOS) window.open(url,"_blank"); else { document.body.appendChild(a); a.click(); a.remove(); }
-    setTimeout(()=>URL.revokeObjectURL(url),60000);
-  },"image/png");
 }
 function wrap(s,n){ const out=[]; (s||"").split("\n").forEach(line=>{ while(line.length>n){ out.push(line.slice(0,n)); line=line.slice(n);} out.push(line); }); return out; }
 
