@@ -171,6 +171,39 @@
 
 <script>
 "use strict";
+/*
+================================================================================
+ BAI Tool — 単一HTML / 外部依存なし / バニラJS。詳細仕様は docs/SPEC.md（正典）。
+ 目的: ブルアカ総力戦TLをスマホ片手で「速記」し、表として画像出力する。
+
+ データモデル（localStorage: "bai-tool-store-v1"）
+   store = { docs:[doc], currentId, imgLib:{ 名前: dataURL } }   // imgLib は全TL共通
+   doc   = { id, title, roster:[char], rows:[row], activeId, updatedAt }
+   char  = { id, name, text, color, img(dataURL|null), num }      // roster=今回使うキャラ
+   row   = { id, num, time, cells:[cell], memo }                  // 表の1行
+   cell  = { charId, badge:(number|null), ring:(色|null) }        // 配置した1キャラ
+   ・state = 現在表示中の doc（store.docs 内の参照）。save() は store 全体を保存。
+   ・旧 "bai-tool-v1"（単一doc）は loadStore() が自動移行。
+
+ 画面（縦リスト=表）
+   ヘッダ: [☰TL一覧] タイトル [キャラ]   /   上段に使用キャラのミニ表示
+   表: 各行 = コスト | タイム | キャラ配置(cells) | メモ
+   下部バー(親指ゾーン): ＋行 / ▲▼ / 行複製 / 行削除 / 使用キャラ(タップで配置)
+
+ 操作（速記の核）
+   ・下部ロスターのキャラをタップ → 選択中(active)の行に配置
+   ・置いたセルのジェスチャ（attachFlick→gesture）:
+       タップ=枠色cycle(ring) / 上=badge+1 / 下=-1 / 右=+3 / 左=削除
+   ・コスト欄は整数のみ丸数字表示(7→⑦, circledCost)。小数/「即」等はそのまま
+
+ 自動更新: CHAR_NAMES(名前) と CHAR_ICONS(名前→SchaleDB Id) を
+   scripts/update-chars.mjs が月1で SchaleDB から更新（START/END マーカー間を置換）。
+   アイコンは iconUrlFor()→imageUrlToDataUrl() で取得し端末ローカルにのみ保存。
+
+ 主な関数: render/renderTable/buildRow/renderCells, placeChar, gesture,
+   openCharSheet(キャラ編集+名前検索+画像), btnDocs(TL一覧), exportPNG/drawAvatar。
+================================================================================
+*/
 /* ===== state ===== */
 const PALETTE = ["#5b8cff","#ff5b6e","#3ddc97","#ffb648","#b06bff","#ff7ac8","#4fd6e6","#8bd450","#ff8a5b","#9aa3c7"];
 /* ブルアカ生徒名（SchaleDB の JP データより。ベース名→バージョン付きの順。
