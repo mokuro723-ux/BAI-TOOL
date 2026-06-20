@@ -59,6 +59,9 @@
   .cbadge{position:absolute; right:-3px; bottom:-3px; min-width:15px; height:15px; padding:0 2px;
     border-radius:8px; background:#000a; color:#fff; font-size:10px; font-weight:700;
     line-height:15px; text-align:center;}
+  .cmark{position:absolute; left:-3px; top:-3px; min-width:15px; height:15px; padding:0 2px;
+    border-radius:8px; background:#1d4ed8; color:#fff; font-size:10px; font-weight:700;
+    line-height:15px; text-align:center;}
 
   /* avatar (角丸四角・既定の外枠は黒) */
   .av{border-radius:6px; flex:0 0 auto; display:flex; align-items:center; justify-content:center;
@@ -155,13 +158,14 @@
 
 <!-- bottom bar -->
 <div class="bar">
-  <div class="hint" id="hint">下のキャラ＝選択中の行に配置 ／ 置いたアイコン: タップ＝枠色, 上＝+1, 下＝-1, 右＝+3, 左＝削除</div>
+  <div class="hint" id="hint">下のキャラ＝選択中の行に配置 ／ 置いたアイコン: タップ＝枠色, 上＝+1, 下＝-1, 右＝+3, 左＝←印</div>
   <div class="barbtns">
     <button class="bb act" id="btnAddRow">＋行</button>
     <button class="bb sub" id="btnUp" title="上へ">▲</button>
     <button class="bb sub" id="btnDown" title="下へ">▼</button>
     <button class="bb" id="btnDup">行複製</button>
     <button class="bb" id="btnDelRow" style="color:var(--danger)">行削除</button>
+    <button class="bb" id="btnDelCell" style="color:var(--danger)" title="選択中の行の最後に置いたキャラを削除">セル削除</button>
   </div>
   <div class="barroster" id="barroster"></div>
 </div>
@@ -181,19 +185,20 @@
    doc   = { id, title, roster:[char], rows:[row], activeId, updatedAt }
    char  = { id, name, text, color, img(dataURL|null), num }      // roster=今回使うキャラ
    row   = { id, num, time, cells:[cell], memo }                  // 表の1行
-   cell  = { charId, badge:(number|null), ring:(色|null) }        // 配置した1キャラ
+   cell  = { charId, badge:(number|null), ring:(色|null), mark:(\"←\"|null) }  // 配置した1キャラ
    ・state = 現在表示中の doc（store.docs 内の参照）。save() は store 全体を保存。
    ・旧 "bai-tool-v1"（単一doc）は loadStore() が自動移行。
 
  画面（縦リスト=表）
    ヘッダ: [☰TL一覧] タイトル [キャラ]   /   上段に使用キャラのミニ表示
    表: 各行 = コスト | タイム | キャラ配置(cells) | メモ
-   下部バー(親指ゾーン): ＋行 / ▲▼ / 行複製 / 行削除 / 使用キャラ(タップで配置)
+   下部バー(親指ゾーン): ＋行 / ▲▼ / 行複製 / 行削除 / セル削除 / 使用キャラ(タップで配置)
 
  操作（速記の核）
    ・下部ロスターのキャラをタップ → 選択中(active)の行に配置
    ・置いたセルのジェスチャ（attachFlick→gesture）:
-       タップ=枠色cycle(ring) / 上=badge+1 / 下=-1 / 右=+3 / 左=削除
+       タップ=枠色cycle(ring) / 上=badge+1 / 下=-1 / 右=+3 / 左=←印トグル(mark)
+   ・削除は下部バーの「セル削除」ボタン（選択中の行の最後に置いたキャラを1つ削除）
    ・コスト欄は整数のみ丸数字表示(7→⑦, circledCost)。小数/「即」等はそのまま
 
  自動更新: CHAR_NAMES(名前) と CHAR_ICONS(名前→SchaleDB Id) を
@@ -317,7 +322,7 @@ function renderCells(row, wrap){
   row.cells.forEach((cell,idx)=>{
     const c=rosterById(cell.charId);
     const d=document.createElement("div"); d.className="cell";
-    d.innerHTML=avatarHTML(c,"")+(cell.badge?`<span class="cbadge">${escapeHTML(String(cell.badge))}</span>`:"");
+    d.innerHTML=avatarHTML(c,"")+(cell.badge?`<span class="cbadge">${escapeHTML(String(cell.badge))}</span>`:"")+(cell.mark?`<span class="cmark">${escapeHTML(cell.mark)}</span>`:"");
     if(cell.ring){ const av=d.querySelector(".av"); if(av){ av.style.borderColor=cell.ring; av.style.borderWidth="3px"; } }
     attachFlick(d, row, idx);
     wrap.appendChild(d);
@@ -337,7 +342,7 @@ function activeRow(){ return state.rows.find(r=>r.id===state.activeId) || state.
 function placeChar(charId){
   if(!state.roster.length){ openCharSheet(null); return; }
   const row=activeRow(); if(!row) return;
-  row.cells.push({ charId, badge:null }); save(); refreshRowCells(row);
+  row.cells.push({ charId, badge:null, mark:null }); save(); refreshRowCells(row);
 }
 function attachFlick(el, row, idx){
   let sx=0, sy=0;
@@ -351,25 +356,45 @@ function bumpBadge(row,idx,d){ const c=row.cells[idx]; if(!c) return;
   c.badge=(c.badge||0)+d; if(c.badge<=0) c.badge=null; save(); refreshRowCells(row); }
 function cycleRing(row,idx){ const c=row.cells[idx]; if(!c) return;
   const i=RING_COLORS.indexOf(c.ring||""); c.ring=RING_COLORS[(i+1)%RING_COLORS.length]||null; save(); refreshRowCells(row); }
+function toggleMark(row,idx){ const c=row.cells[idx]; if(!c) return;
+  c.mark = c.mark ? null : "←"; save(); refreshRowCells(row); }
+function deleteLastCell(){
+  const row=activeRow(); if(!row || !row.cells.length) return;
+  row.cells.pop(); save(); refreshRowCells(row);
+}
 function gesture(row, idx, dx, dy){
   const TH=22, adx=Math.abs(dx), ady=Math.abs(dy);
   if(adx<TH && ady<TH){ cycleRing(row, idx); return; } // タップ＝枠色（スキル対象の判別）
   const cell=row.cells[idx]; if(!cell) return;
   if(ady>=adx){ bumpBadge(row, idx, dy<0?1:-1); }
-  else if(dx<0){ row.cells.splice(idx,1); save(); refreshRowCells(row); }
+  else if(dx<0){ toggleMark(row, idx); }
   else { bumpBadge(row, idx, 3); }
 }
 
 /* ===== row ops ===== */
+let pendingScrollRowId=null, scrollRaf=null;
+function scrollRowIntoView(rowId){
+  // 連打で renderTable() が連続発生しても scrollIntoView の smooth アニメーションが
+  // 多重に積み重なって暴走しスクロール不能になるバグの対策。
+  // 1) smooth ではなく instant(瞬間移動)にする 2) rAF で1フレームに1回だけ実行する
+  pendingScrollRowId=rowId;
+  if(scrollRaf) return;
+  scrollRaf=requestAnimationFrame(()=>{
+    scrollRaf=null;
+    const node=document.querySelector(`.trow[data-row="${pendingScrollRowId}"]`);
+    if(node) node.scrollIntoView({block:"center",behavior:"instant"});
+  });
+}
 document.getElementById("btnAddRow").onclick=()=>{
   const r=newRow(); state.rows.push(r); state.activeId=r.id; save(); renderTable();
-  const node=document.querySelector(`.trow[data-row="${r.id}"]`); if(node) node.scrollIntoView({block:"center",behavior:"smooth"});
+  scrollRowIntoView(r.id);
 };
 document.getElementById("btnDelRow").onclick=()=>{
   if(state.rows.length<=1){ const r=activeRow(); r.num=r.time=r.memo=""; r.cells=[]; save(); renderTable(); return; }
   const i=state.rows.findIndex(r=>r.id===state.activeId); if(i<0) return;
   state.rows.splice(i,1); state.activeId=(state.rows[i]||state.rows[i-1]).id; save(); renderTable();
 };
+document.getElementById("btnDelCell").onclick=deleteLastCell;
 document.getElementById("btnDup").onclick=()=>{
   const i=state.rows.findIndex(r=>r.id===state.activeId); if(i<0) return;
   const src=state.rows[i]; const cp=JSON.parse(JSON.stringify(src)); cp.id=uid();
