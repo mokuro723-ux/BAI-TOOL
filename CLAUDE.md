@@ -49,8 +49,20 @@ docs/
 - 取得元は SchaleDB の JP データ（`https://schaledb.com/data/jp/students.min.json`）。
   `IsReleased[0]`（JP 実装済み）の `Name` を採用。
   ※ wiki は GitHub のIPに JS チャレンジを返し CI から取得できなかったため SchaleDB に変更した。
+- 更新対象は 2 ブロック: `CHAR_NAMES`（名前リスト）と `CHAR_ICONS`（名前→SchaleDB Id）。
+  どちらも START/END マーカーで囲まれており、`scripts/update-chars.mjs` が両方を置換する。
 - 手動更新は `node scripts/update-chars.mjs`。GitHub Actions が毎月1日に自動実行＆コミットする。
 - 取得名が 100 件未満になった場合はスクリプトが中断（誤って空リストを書かない安全装置）。
+
+### キャラアイコンの自動取得
+
+- キャラ名検索で名前を選ぶと、`CHAR_ICONS` の Id から
+  `https://schaledb.com/images/student/icon/{Id}.webp` を取得し、96px JPEG にして
+  そのキャラの画像にする。SchaleDB は `Access-Control-Allow-Origin: *` なので
+  canvas に描いても汚染されず、PNG 出力も成立する。
+- 取得した画像は **端末の localStorage にのみ保存**（リポジトリには同梱しない＝再配布しない）。
+  一度取得すれば imgLib に名前キーで残り、次回以降は再取得不要。
+- 公式アートは © NEXON Games / Yostar。非営利・端末ローカル保存の範囲で利用する。
 
 **実装の詳細仕様は [docs/SPEC.md](docs/SPEC.md) を参照**。コードを書く前に必ず読むこと。
 
