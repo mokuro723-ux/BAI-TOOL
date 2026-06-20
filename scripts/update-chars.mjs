@@ -30,8 +30,14 @@ function buildList(names) {
 }
 
 async function main() {
+  // wiki 側 WAF が非ブラウザ UA / Accept 無しを 415 で弾くため、ブラウザ同等のヘッダを送る
   const res = await fetch(SRC_URL, {
-    headers: { "User-Agent": "Mozilla/5.0 (BAI-Tool char list updater)" },
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "ja,en-US;q=0.8,en;q=0.6",
+    },
   });
   if (!res.ok) throw new Error(`fetch failed: HTTP ${res.status}`);
   const html = await res.text();
