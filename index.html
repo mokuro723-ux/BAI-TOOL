@@ -60,9 +60,9 @@
     border-radius:8px; background:#000a; color:#fff; font-size:10px; font-weight:700;
     line-height:15px; text-align:center;}
 
-  /* avatar */
-  .av{border-radius:50%; flex:0 0 auto; display:flex; align-items:center; justify-content:center;
-    font-weight:700; color:#fff; overflow:hidden; border:2px solid rgba(255,255,255,.25);}
+  /* avatar (角丸四角・既定の外枠は白) */
+  .av{border-radius:6px; flex:0 0 auto; display:flex; align-items:center; justify-content:center;
+    font-weight:700; color:#fff; overflow:hidden; border:2px solid #ffffff;}
   .av img{width:100%; height:100%; object-fit:cover;}
   .av.r{width:36px; height:36px; font-size:12px;}
   .av.lg{width:52px; height:52px; font-size:16px;}
@@ -135,9 +135,9 @@
 
 <header>
   <div class="htop">
+    <button class="hbtn" id="btnDocs">☰ TL</button>
     <input id="title" placeholder="タイトル（例: ホバークラフト TMT 2凸 前半）">
-    <button class="hbtn" id="btnRoster">キャラ編集</button>
-    <button class="hbtn" id="btnSave2">保存</button>
+    <button class="hbtn" id="btnRoster">キャラ</button>
   </div>
   <div class="hroster" id="hroster"></div>
 </header>
@@ -155,7 +155,7 @@
 
 <!-- bottom bar -->
 <div class="bar">
-  <div class="hint" id="hint">下のキャラ＝選択中の行に配置 ／ 置いたアイコン: タップ＝枠色, 上下フリック＝数字, 左＝削除, 右＝複製</div>
+  <div class="hint" id="hint">下のキャラ＝選択中の行に配置 ／ 置いたアイコン: タップ＝枠色, 上＝+1, 下＝-1, 右＝+3, 左＝削除</div>
   <div class="barbtns">
     <button class="bb act" id="btnAddRow">＋ 行を追加</button>
     <button class="bb sub" id="btnUp" title="上へ">▲</button>
@@ -188,26 +188,34 @@ function iconUrlFor(name){ const id=CHAR_ICONS[name]; return id!=null ? ICON_BAS
 /* ひらがな→カタカナ（検索一致用） */
 function toKata(s){ return (s||"").replace(/[ぁ-ゖ]/g, m=>String.fromCharCode(m.charCodeAt(0)+0x60)); }
 
-const LS_KEY = "bai-tool-v1";
+const STORE_KEY = "bai-tool-store-v1";
+const OLD_KEY = "bai-tool-v1";
 const uid = ()=> Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 function newRow(){ return { id:uid(), num:"", time:"", cells:[], memo:"" }; }
-function defaultState(){ return { title:"", roster:[], rows:[newRow()], imgLib:{}, activeId:null }; }
-function migrate(s){
-  if(!s.roster) s.roster = Array.isArray(s.characters) ? s.characters.map((c,i)=>Object.assign({num:i+1},c)) : [];
-  if(!Array.isArray(s.rows) || !s.rows.length) s.rows = [newRow()];
-  if(!s.imgLib) s.imgLib = {};
-  delete s.characters; delete s.events; delete s.mode; delete s.maxTime; delete s.memo;
+function newDoc(title){ return { id:uid(), title:title||"", roster:[], rows:[newRow()], activeId:null, updatedAt:Date.now() }; }
+function fixDoc(d){
+  if(!d.roster) d.roster = Array.isArray(d.characters) ? d.characters.map((c,i)=>Object.assign({num:i+1},c)) : [];
+  if(!Array.isArray(d.rows) || !d.rows.length) d.rows = [newRow()];
+  if(!d.activeId || !d.rows.find(r=>r.id===d.activeId)) d.activeId = d.rows[d.rows.length-1].id;
+  delete d.characters; delete d.events; delete d.mode; delete d.maxTime; delete d.memo; delete d.imgLib;
 }
-function load(){
-  try{ const s=JSON.parse(localStorage.getItem(LS_KEY)); if(s){ migrate(s); return Object.assign(defaultState(), s); } }catch(e){}
-  return defaultState();
+function defaultStore(){ const d=newDoc(""); return { docs:[d], currentId:d.id, imgLib:{} }; }
+function loadStore(){
+  try{ const s=JSON.parse(localStorage.getItem(STORE_KEY));
+    if(s && Array.isArray(s.docs) && s.docs.length){ s.docs.forEach(fixDoc); if(!s.imgLib) s.imgLib={};
+      if(!s.docs.find(d=>d.id===s.currentId)) s.currentId=s.docs[0].id; return s; } }catch(e){}
+  // 旧 単一データからの移行
+  try{ const old=JSON.parse(localStorage.getItem(OLD_KEY));
+    if(old){ const d=newDoc(old.title||""); d.roster=old.roster||old.characters; d.rows=old.rows; d.activeId=old.activeId;
+      fixDoc(d); return { docs:[d], currentId:d.id, imgLib:old.imgLib||{} }; } }catch(e){}
+  return defaultStore();
 }
-let state = load();
-if(!state.activeId || !state.rows.find(r=>r.id===state.activeId)) state.activeId = state.rows[state.rows.length-1].id;
+let store = loadStore();
+let state = store.docs.find(d=>d.id===store.currentId) || store.docs[0];
 
 let saveTimer=null;
-function save(){ clearTimeout(saveTimer); saveTimer=setTimeout(()=>{
-  try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){ alert("保存に失敗（容量不足の可能性）"); } }, 120); }
+function save(){ if(state) state.updatedAt=Date.now(); clearTimeout(saveTimer); saveTimer=setTimeout(()=>{
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(store)); }catch(e){ alert("保存に失敗（容量不足の可能性）"); } }, 120); }
 const rosterById = id => state.roster.find(c=>c.id===id);
 function escapeHTML(s){ return (s||"").replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
 
@@ -263,8 +271,8 @@ function buildRow(row){
   renderCells(row, cells);
   return el;
 }
-/* セル枠色（スキル対象の判別用）。"" = 枠なし。タップで順送り */
-const RING_COLORS = ["", "#ffffff", "#ff3b3b", "#ffd400", "#39ff14", "#00d0ff", "#ff2bd6", "#ff8a00"];
+/* セル枠色（スキル対象の判別用）。"" = 既定（白）。タップで順送り */
+const RING_COLORS = ["", "#ff3b3b", "#ffd400", "#39ff14", "#00d0ff", "#ff2bd6", "#ff8a00", "#1a1a1a"];
 function renderCells(row, wrap){
   wrap.innerHTML="";
   row.cells.forEach((cell,idx)=>{
@@ -310,7 +318,7 @@ function gesture(row, idx, dx, dy){
   const cell=row.cells[idx]; if(!cell) return;
   if(ady>=adx){ bumpBadge(row, idx, dy<0?1:-1); }
   else if(dx<0){ row.cells.splice(idx,1); save(); refreshRowCells(row); }
-  else { row.cells.splice(idx+1,0,{charId:cell.charId, badge:cell.badge, ring:cell.ring}); save(); refreshRowCells(row); }
+  else { bumpBadge(row, idx, 3); }
 }
 
 /* ===== row ops ===== */
@@ -365,9 +373,9 @@ function openCharSheet(charId){
     { id:uid(), name:"", text:"", color:PALETTE[state.roster.length%PALETTE.length], img:null, num:nextNum() };
 
   function libGalleryHTML(){
-    const keys=Object.keys(state.imgLib||{}); if(!keys.length) return "";
+    const keys=Object.keys(store.imgLib||{}); if(!keys.length) return "";
     const items=keys.map(k=>`<button type="button" class="pick libpick" data-lib="${escapeHTML(k)}" title="${escapeHTML(k)}">`+
-      `<span class="av r"><img src="${state.imgLib[k]}"></span><i class="libdel" data-libdel="${escapeHTML(k)}">×</i></button>`).join("");
+      `<span class="av r"><img src="${store.imgLib[k]}"></span><i class="libdel" data-libdel="${escapeHTML(k)}">×</i></button>`).join("");
     return `<div class="field"><label>保存済みアイコン（タップで再利用）</label><div class="picker">${items}</div></div>`;
   }
   function body(){
@@ -409,7 +417,7 @@ function openCharSheet(charId){
         : '<span style="color:var(--sub);font-size:12px">該当なし。下の「キャラ名」に直接入力してください</span>';
       rEl.querySelectorAll("[data-name]").forEach(b=>b.onclick=()=>{
         sync(); const nm=b.dataset.name; draft.name=nm; if(!draft.text) draft.text=nm.slice(0,2);
-        if(!draft.img && state.imgLib && state.imgLib[nm]) draft.img=state.imgLib[nm];
+        if(!draft.img && store.imgLib && store.imgLib[nm]) draft.img=store.imgLib[nm];
         if(!draft.img){ const u=iconUrlFor(nm); if(u) autoIcon(u, nm); }
         refresh(); });
     }
@@ -418,12 +426,12 @@ function openCharSheet(charId){
     sEl.oninput=renderResults; renderResults();
     sheet.querySelectorAll("[data-lib]").forEach(b=>b.onclick=(e)=>{
       if(e.target.hasAttribute("data-libdel")) return;
-      sync(); const k=b.dataset.lib; draft.img=state.imgLib[k];
+      sync(); const k=b.dataset.lib; draft.img=store.imgLib[k];
       if(!draft.name) draft.name=k; if(!draft.text) draft.text=k.slice(0,2); refresh(); });
     sheet.querySelectorAll("[data-libdel]").forEach(x=>x.onclick=(e)=>{ e.stopPropagation(); sync(); const k=x.dataset.libdel;
-      if(confirm("保存済みアイコン「"+k+"」を一覧から削除しますか？")){ delete state.imgLib[k]; save(); refresh(); } });
+      if(confirm("保存済みアイコン「"+k+"」を一覧から削除しますか？")){ delete store.imgLib[k]; save(); refresh(); } });
     const nameEl=sheet.querySelector("#cName"); if(nameEl) nameEl.onblur=()=>{ sync();
-      if(!draft.img && draft.name && state.imgLib && state.imgLib[draft.name]) draft.img=state.imgLib[draft.name];
+      if(!draft.img && draft.name && store.imgLib && store.imgLib[draft.name]) draft.img=store.imgLib[draft.name];
       refresh(); };
     const fb=sheet.querySelector("#cFetch"); if(fb) fb.onclick=()=>{ sync(); const u=iconUrlFor(draft.name);
       if(!u){ alert("このキャラの公式アイコンは見つかりません"); return; }
@@ -439,7 +447,7 @@ function openCharSheet(charId){
     sheet.querySelector("#cCancel").onclick=closeSheet;
     sheet.querySelector("#cSave").onclick=()=>{ sync();
       if(!draft.name && !draft.text && !draft.img){ alert("名前かアイコン文字を入力してください"); return; }
-      if(draft.img && draft.name){ state.imgLib=state.imgLib||{}; state.imgLib[draft.name]=draft.img; }
+      if(draft.img && draft.name){ store.imgLib=store.imgLib||{}; store.imgLib[draft.name]=draft.img; }
       if(isNew) state.roster.push(draft); else Object.assign(c, draft);
       save(); render(); closeSheet(); };
   }
@@ -463,17 +471,50 @@ function imageUrlToDataUrl(url, cb, onerr){
   img.src=url;
 }
 
+/* ===== documents (複数TL) ===== */
+function switchDoc(id){ const d=store.docs.find(x=>x.id===id); if(!d) return; store.currentId=id; state=d; save(); render(); closeSheet(); }
+function fmtDate(ts){ if(!ts) return ""; const d=new Date(ts); const p=n=>String(n).padStart(2,"0");
+  return `${d.getMonth()+1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+document.getElementById("btnDocs").onclick=()=>{
+  const list=store.docs.slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).map(d=>{
+    const cur=d.id===store.currentId;
+    return `<div class="mgrItem">
+      <span class="name">${cur?'● ':''}${escapeHTML(d.title||"無題")}<br><small style="color:var(--sub)">${fmtDate(d.updatedAt)} ・ ${d.rows.filter(r=>r.cells.length||r.num||r.time||r.memo).length}行</small></span>
+      <button data-open="${d.id}">開く</button>
+      <button data-dup="${d.id}">複製</button>
+      <button data-del="${d.id}" style="color:var(--danger)">削除</button>
+    </div>`; }).join("");
+  openSheet(`<h2>TL一覧（${store.docs.length}）</h2>
+    <div class="sheet-actions" style="margin-bottom:12px"><button class="btn primary" id="dNew">＋ 新規TLを作成</button></div>
+    ${list}
+    <div class="sheet-actions"><button class="btn ghost" id="dClose">閉じる</button></div>`);
+  sheet.querySelector("#dNew").onclick=()=>{ const d=newDoc(""); store.docs.push(d); switchDoc(d.id); };
+  sheet.querySelector("#dClose").onclick=closeSheet;
+  sheet.querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>switchDoc(b.dataset.open));
+  sheet.querySelectorAll("[data-dup]").forEach(b=>b.onclick=()=>{
+    const src=store.docs.find(x=>x.id===b.dataset.dup); const cp=JSON.parse(JSON.stringify(src));
+    cp.id=uid(); cp.title=(src.title||"無題")+" のコピー"; cp.updatedAt=Date.now();
+    cp.rows.forEach(r=>r.id=uid()); cp.activeId=cp.rows[cp.rows.length-1].id;
+    store.docs.push(cp); switchDoc(cp.id); });
+  sheet.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{
+    if(store.docs.length<=1){ alert("最後の1件は削除できません"); return; }
+    const d=store.docs.find(x=>x.id===b.dataset.del);
+    if(!confirm("TL「"+(d.title||"無題")+"」を削除しますか？")) return;
+    store.docs=store.docs.filter(x=>x.id!==b.dataset.del);
+    if(store.currentId===b.dataset.del){ store.currentId=store.docs[0].id; state=store.docs[0]; }
+    save(); render(); document.getElementById("btnDocs").click(); });
+};
+
 /* ===== PNG export ===== */
 document.getElementById("btnSave").onclick=exportPNG;
-document.getElementById("btnSave2").onclick=()=>{ save(); flash("保存しました"); };
 function flash(msg){ const h=document.getElementById("hint"); const o=h.textContent; h.textContent=msg; setTimeout(()=>h.textContent=o,1200); }
 
 function exportPNG(){
   const rows=state.rows;
   if(rows.every(r=>!r.num&&!r.time&&!r.cells.length&&!r.memo)){ alert("内容がありません"); return; }
-  const W=1040, pad=20, NUM=88, TIME=104, MEMO=240, IC=40, GAP=6;
+  const W=760, pad=16, NUM=56, TIME=74, MEMO=170, IC=34, GAP=5;
   const cellsX=pad+NUM+TIME, cellsW=W-pad-MEMO-cellsX, perLine=Math.max(1,Math.floor((cellsW+GAP)/(IC+GAP)));
-  const headH=70+(state.roster.length?56:0);
+  const headH=60+(state.roster.length?48:0);
   const rowHeights=rows.map(r=>{ const lines=Math.max(1,Math.ceil((r.cells.length||0)/perLine)); return Math.max(54, lines*(IC+8)+8); });
   const H=headH + rowHeights.reduce((a,b)=>a+b,0) + pad;
   const cv=document.getElementById("exportCanvas"); cv.width=W; cv.height=H;
@@ -485,39 +526,39 @@ function exportPNG(){
   state.roster.forEach(c=>{ if(c.img){ const im=new Image(); im.src=c.img; imgs[c.id]=im; toLoad.push(im); } });
 
   const draw=()=>{
-    ctx.fillStyle="#eef1ff"; ctx.font="bold 26px sans-serif"; ctx.textAlign="left";
-    ctx.fillText(state.title||"BAI Tool TL", pad, 30);
-    let top=58;
+    ctx.fillStyle="#eef1ff"; ctx.font="bold 22px sans-serif"; ctx.textAlign="left";
+    ctx.fillText(state.title||"BAI Tool TL", pad, 26);
+    let top=50;
     if(state.roster.length){
-      ctx.fillStyle="#9aa3c7"; ctx.font="13px sans-serif"; ctx.fillText("使用キャラ:", pad, top+18);
-      let rx=pad+86; state.roster.forEach(c=>{ drawAvatar(ctx,c,rx,top+18,18,imgs); rx+=44; });
-      top+=52;
+      ctx.fillStyle="#9aa3c7"; ctx.font="12px sans-serif"; ctx.fillText("使用キャラ:", pad, top+16);
+      let rx=pad+72; state.roster.forEach(c=>{ drawAvatar(ctx,c,rx,top+16,15,imgs); rx+=38; });
+      top+=46;
     }
     // header row
-    const hy=top; ctx.fillStyle="#222845"; ctx.fillRect(0,hy,W,28);
-    ctx.fillStyle="#9aa3c7"; ctx.font="bold 13px sans-serif";
-    ctx.fillText("数字", pad+10, hy+14); ctx.fillText("タイム", pad+NUM+10, hy+14);
-    ctx.fillText("キャラ配置", cellsX+6, hy+14); ctx.fillText("メモ", W-MEMO+6, hy+14);
-    let y=hy+28;
+    const hy=top; ctx.fillStyle="#222845"; ctx.fillRect(0,hy,W,26);
+    ctx.fillStyle="#9aa3c7"; ctx.font="bold 12px sans-serif"; ctx.textBaseline="middle";
+    ctx.fillText("数字", pad+8, hy+13); ctx.fillText("タイム", pad+NUM+8, hy+13);
+    ctx.fillText("キャラ配置", cellsX+6, hy+13); ctx.fillText("メモ", W-MEMO+6, hy+13);
+    let y=hy+26;
     rows.forEach((r,ri)=>{
       const h=rowHeights[ri];
       if(ri%2) { ctx.fillStyle="#161a2e"; ctx.fillRect(0,y,W,h); }
       ctx.strokeStyle="#2e3556"; ctx.beginPath(); ctx.moveTo(0,y+h); ctx.lineTo(W,y+h); ctx.stroke();
       const cy=y+h/2;
-      ctx.fillStyle="#eef1ff"; ctx.font="bold 18px sans-serif"; ctx.textAlign="center";
+      ctx.textBaseline="middle";
+      ctx.fillStyle="#eef1ff"; ctx.font="bold 16px sans-serif"; ctx.textAlign="center";
       if(r.num) ctx.fillText(r.num, pad+NUM/2, cy);
       ctx.fillStyle="#5b8cff"; if(r.time) ctx.fillText(r.time, pad+NUM+TIME/2, cy);
       // cells
       r.cells.forEach((cell,i)=>{ const line=Math.floor(i/perLine), col=i%perLine;
         const x=cellsX+col*(IC+GAP)+IC/2, yy=y+8+line*(IC+8)+IC/2;
-        drawAvatar(ctx, rosterById(cell.charId), x, yy, IC/2, imgs);
-        if(cell.ring){ ctx.strokeStyle=cell.ring; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(x,yy,IC/2-1,0,Math.PI*2); ctx.stroke(); }
-        if(cell.badge){ ctx.fillStyle="#000a"; ctx.beginPath(); ctx.arc(x+IC/2-4,yy+IC/2-4,9,0,7); ctx.fill();
-          ctx.fillStyle="#fff"; ctx.font="bold 12px sans-serif"; ctx.textAlign="center"; ctx.fillText(String(cell.badge),x+IC/2-4,yy+IC/2-4); }
+        drawAvatar(ctx, rosterById(cell.charId), x, yy, IC/2, imgs, cell.ring);
+        if(cell.badge){ ctx.fillStyle="#000c"; ctx.beginPath(); ctx.arc(x+IC/2-3,yy+IC/2-3,8,0,7); ctx.fill();
+          ctx.fillStyle="#fff"; ctx.font="bold 11px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(String(cell.badge),x+IC/2-3,yy+IC/2-3); }
       });
       // memo
-      if(r.memo){ ctx.fillStyle="#cfd5f5"; ctx.font="14px sans-serif"; ctx.textAlign="left";
-        wrap(r.memo,18).slice(0,3).forEach((ln,k)=> ctx.fillText(ln, W-MEMO+6, cy-((Math.min(3,wrap(r.memo,18).length)-1)*9)+k*18)); }
+      if(r.memo){ ctx.fillStyle="#cfd5f5"; ctx.font="13px sans-serif"; ctx.textAlign="left";
+        const ls=wrap(r.memo,16).slice(0,3); ls.forEach((ln,k)=> ctx.fillText(ln, W-MEMO+6, cy-((ls.length-1)*8)+k*16)); }
       y+=h;
     });
     showResult(cv);
@@ -538,12 +579,17 @@ function showResult(cv){
     </div>`);
   sheet.querySelector("#exClose").onclick=closeSheet;
 }
-function drawAvatar(ctx,c,x,cy,r,imgs){
-  ctx.save(); ctx.beginPath(); ctx.arc(x,cy,r,0,Math.PI*2); ctx.fillStyle=c?c.color:"#444"; ctx.fill();
-  if(c&&c.img&&imgs[c.id]&&imgs[c.id].complete&&imgs[c.id].naturalWidth){ ctx.clip(); ctx.drawImage(imgs[c.id],x-r,cy-r,r*2,r*2); }
-  else{ ctx.fillStyle="#fff"; ctx.font="bold "+Math.round(r*0.8)+"px sans-serif"; ctx.textAlign="center";
+function rrect(ctx,x,y,w,h,rad){ ctx.beginPath();
+  ctx.moveTo(x+rad,y); ctx.arcTo(x+w,y,x+w,y+h,rad); ctx.arcTo(x+w,y+h,x,y+h,rad);
+  ctx.arcTo(x,y+h,x,y,rad); ctx.arcTo(x,y,x+w,y,rad); ctx.closePath(); }
+function drawAvatar(ctx,c,x,cy,r,imgs,ring){
+  const s=r*2, X=x-r, Y=cy-r, rad=Math.max(3,r*0.28);
+  ctx.save(); rrect(ctx,X,Y,s,s,rad); ctx.fillStyle=c?c.color:"#444"; ctx.fill();
+  if(c&&c.img&&imgs[c.id]&&imgs[c.id].complete&&imgs[c.id].naturalWidth){ ctx.clip(); ctx.drawImage(imgs[c.id],X,Y,s,s); }
+  else{ ctx.fillStyle="#fff"; ctx.font="bold "+Math.round(r*0.8)+"px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
     ctx.fillText((c?(c.text||c.name||"?"):"?").slice(0,2), x, cy); }
   ctx.restore();
+  ctx.lineWidth=ring?3:2; ctx.strokeStyle=ring||"#ffffff"; rrect(ctx,X,Y,s,s,rad); ctx.stroke();
 }
 function wrap(s,n){ const out=[]; (s||"").split("\n").forEach(line=>{ while(line.length>n){ out.push(line.slice(0,n)); line=line.slice(n);} out.push(line); }); return out; }
 
