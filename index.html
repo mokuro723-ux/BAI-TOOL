@@ -153,7 +153,7 @@
     <button class="hicon" id="btnPinpGap" title="PinP用の余白を表示/非表示">⬓</button>
     <button class="hbtn" id="btnRoster">キャラ</button>
     <button class="hicon" id="btnImport" title="テキスト/画像からTLを取込">📋</button>
-    <button class="hicon" id="btnNick" title="あだ名辞書を管理">📖</button>
+    <button class="hicon" id="btnNick" title="あだ名・スキルキーワード辞書を管理">📖</button>
     <button class="hicon" id="btnUndo" title="元に戻す">↶</button>
     <button class="hicon" id="btnRedo" title="やり直し">↷</button>
   </div>
@@ -541,6 +541,23 @@ function resolveNickname(name){
   return d[name] || name;
 }
 
+// スキルキーワード辞書: 「チャージ」のようにキャラ名が書かれず効果名だけが
+// 書かれる行で、どのキャラの行として扱うかを設定する辞書。
+// 例: {"チャージ":"アリス"} → 「チャージ①」「チャージ②」は常にアリスに紐付く
+// （あだ名辞書と違い、文中にキーワードが「含まれている」かで判定する）
+const SKILL_KEY = "bai-tool-skill-keywords";
+function loadSkillKeywords(){ try{ return JSON.parse(localStorage.getItem(SKILL_KEY)||"{}"); }catch(e){ return {}; } }
+function saveSkillKeywords(d){ localStorage.setItem(SKILL_KEY, JSON.stringify(d)); }
+// nm（例: "チャージ①"）にスキルキーワードが含まれていれば、対応するロスターキャラを返す
+function resolveSkillKeyword(nm){
+  const d=loadSkillKeywords();
+  const keys=Object.keys(d).sort((a,b)=>b.length-a.length); // 長いキーワード優先
+  for(const k of keys){
+    if(k && nm.includes(k)){ const c=findRosterChar(d[k]); if(c) return c; }
+  }
+  return null;
+}
+
 function findRosterChar(name){
   if(!name) return null;
   // 1. あだ名辞書で正式名に変換してから完全一致
@@ -595,6 +612,32 @@ function splitNameAndBadges(body){
   const markLabel=markParts.length ? markParts.join("") : null;
   return { char:c, suffix, badges, mark:markLabel };
 }
+// body（"→"区切り後の本文）を、文中に複数回現れるマーカー単語（即・AUTO即等）の
+// 直前でも分割し、それぞれを独立したキャラ名候補にする。
+// 例: "即 カヨコ 即キサキ" → ["カヨコ","キサキ"]（各塊の先頭マーカーは剥がす）
+//     "通常攻撃1発後 即 カヨコ" → 先頭の自由文塊（マーカーもキャラ名候補も含まない）は破棄せずメモへ
+function splitBodyIntoSegments(body){
+  if(!body) return { segNames:[], freeText:"" };
+  // MARK_TOKENS（長い順）のいずれかの直前で改行記号を挿入して分割する
+  const tokens=[...MARK_TOKENS].sort((a,b)=>b.length-a.length);
+  let marked=body;
+  for(const tk of tokens){
+    marked=marked.split(tk).join("\u0001"+tk);
+  }
+  const chunks=marked.split("\u0001").map(s=>s.trim()).filter(Boolean);
+  const segNames=[]; const freeParts=[];
+  for(const chunk of chunks){
+    const {rest:chunkRest}=splitMarker(chunk); // 各塊の先頭マーカーを剥がす
+    if(!chunkRest) continue;
+    // スペース区切りで複数キャラ名が並ぶ可能性があるため、カンマ/読点/スペースで分割
+    const parts=chunkRest.split(/[,、\s]+/).map(s=>s.trim()).filter(Boolean);
+    for(const p of parts){
+      if(findRosterChar(p) || resolveSkillKeyword(p)) segNames.push(p);
+      else freeParts.push(p);
+    }
+  }
+  return { segNames, freeText:freeParts.join(" ") };
+}
 function parseTLImportText(text){
   const lines=(text||"").replace(/\r/g,"").split("\n");
   const rows=[]; const unmatched=[];
@@ -621,23 +664,39 @@ function parseTLImportText(text){
       let body=rest;
       let endMark=false;
       if(/[〆]$/.test(body)){ endMark=true; body=body.replace(/[〆]$/,"").trim(); }
-      const names=body.split(/[,、]/).map(s=>s.trim()).filter(Boolean);
+      // body の途中に「即/AUTO即/後掛」等のマーカー単語が紛れ込んでいる場合
+      // （例: "通常攻撃1発後 即 カヨコ 即キサキ"）は、マーカー単語の前で
+      // サブセグメントに分割してキャラ名候補を拾い直す。
+      const midTokenHit=[...MARK_TOKENS].sort((a,b)=>b.length-a.length).find(tk=>body.includes(tk));
+      let names, extraFreeText="";
+      if(midTokenHit){
+        const {segNames,freeText}=splitBodyIntoSegments(body);
+        names=segNames; extraFreeText=freeText;
+      }else{
+        names=body.split(/[,、]/).map(s=>s.trim()).filter(Boolean);
+      }
       const row=newRow(); row.num=num;
       const memoParts=[]; if(markerText) memoParts.push(markerText); if(markerLabel) memoParts.push(markerLabel);
-      // rest にキャラ名が含まれず、スキル名のみ（例:「チャージ①」）かつ lastChar がいれば
-      // 前の行（rows末尾）にセルを追加する（別行にしない）
-      if(!noteLine && names.length===1 && lastChar && !findRosterChar(names[0])){
+      if(extraFreeText) memoParts.push(extraFreeText);
+      // rest にキャラ名が含まれず、スキル名のみ（例:「チャージ①」）の場合、
+      // 1) スキルキーワード辞書に一致すればそのキャラ 2) なければ lastChar
+      // を紐付け先とし、前の行（rows末尾）にセルを追加する（別行にしない）
+      if(!noteLine && names.length===1 && !findRosterChar(names[0])){
         const nm=names[0];
-        const circledInNm=[...nm].filter(ch=>circledToNum(ch)!=null).map(circledToNum);
-        const badges=circledInNm.length?circledInNm:[null];
-        const nmLabel=nm.replace(/[\u2460-\u2473\u24EA]/g,"").trim().slice(0,3)||null;
-        const targetRow=rows.length?rows[rows.length-1]:null;
-        if(targetRow){
-          for(const b of badges) targetRow.cells.push({charId:lastChar.id, badge:b, mark:nmLabel});
-          // コストがあれば上書き（例: ⑤ チャージ① → コスト5をその行に）
-          if(num) targetRow.num=num;
+        const kwChar=resolveSkillKeyword(nm);
+        const targetChar=kwChar||lastChar;
+        if(targetChar){
+          const circledInNm=[...nm].filter(ch=>circledToNum(ch)!=null).map(circledToNum);
+          const badges=circledInNm.length?circledInNm:[null];
+          const nmLabel=nm.replace(/[\u2460-\u2473\u24EA]/g,"").trim().slice(0,3)||null;
+          const targetRow=rows.length?rows[rows.length-1]:null;
+          if(targetRow){
+            for(const b of badges) targetRow.cells.push({charId:targetChar.id, badge:b, mark:nmLabel});
+            // コストがあれば上書き（例: ⑤ チャージ① → コスト5をその行に）
+            if(num) targetRow.num=num;
+          }
+          continue; // 新規行は作らない
         }
-        continue; // 新規行は作らない
       }
       if(!names.length && body) memoParts.push(body); // 記号のみ等、キャラ名が無い行はメモへ
       if(noteLine){
@@ -662,20 +721,25 @@ function parseTLImportText(text){
               row.cells.push(cell); lastCellOfRow=cell;
             }
             lastChar=parsed.char;
-          }else if(lastChar){
-            // ロスター名と一致しない単独セグメント＝直前キャラのスキル名省略行とみなす。
-            // 末尾に丸数字が付いていれば badge として拾う（例: "チャージ①" → badge=1）
-            const circledInNm=[...nm].filter(ch=>circledToNum(ch)!=null).map(circledToNum);
-            const badges=circledInNm.length?circledInNm:[null];
-            // 丸数字を除いた残りをラベルとして左上に表示（例: "チャージ①" → "チャ"）
-            const nmLabel=nm.replace(/[\u2460-\u2473\u24EA]/g,"").trim().slice(0,3)||null;
-            for(const b of badges){
-              const cell={charId:lastChar.id, badge:b, mark:nmLabel};
-              row.cells.push(cell); lastCellOfRow=cell;
-            }
-            // (suffix はセルの mark に表示済みのためメモには追加しない)
           }else{
-            memoParts.push(nm); unmatched.push(nm);
+            // ロスター名と一致しない単独セグメント＝スキル名省略行とみなす。
+            // 1) スキルキーワード辞書に一致すればそのキャラ 2) なければ直前キャラ(lastChar)
+            const kwChar=resolveSkillKeyword(nm);
+            const targetChar=kwChar||lastChar;
+            if(targetChar){
+              // 末尾に丸数字が付いていれば badge として拾う（例: "チャージ①" → badge=1）
+              const circledInNm=[...nm].filter(ch=>circledToNum(ch)!=null).map(circledToNum);
+              const badges=circledInNm.length?circledInNm:[null];
+              // 丸数字を除いた残りをラベルとして左上に表示（例: "チャージ①" → "チャ"）
+              const nmLabel=nm.replace(/[\u2460-\u2473\u24EA]/g,"").trim().slice(0,3)||null;
+              for(const b of badges){
+                const cell={charId:targetChar.id, badge:b, mark:nmLabel};
+                row.cells.push(cell); lastCellOfRow=cell;
+              }
+              // (suffix はセルの mark に表示済みのためメモには追加しない)
+            }else{
+              memoParts.push(nm); unmatched.push(nm);
+            }
           }
         }
       }
@@ -777,8 +841,12 @@ function openImportSheet(){
 }
 document.getElementById("btnImport").onclick=openImportSheet;
 
-/* ===== あだ名管理シート ===== */
+/* ===== あだ名・スキルキーワード辞書 管理シート ===== */
 function openNickSheet(){
+  function rosterOptions(selected){
+    return `<option value="">（選択）</option>` + state.roster.map(c=>
+      `<option value="${escapeHTML(c.name)}" ${c.name===selected?"selected":""}>${escapeHTML(c.name)}</option>`).join("");
+  }
   function body(){
     const d=loadNicknames();
     const entries=Object.entries(d);
@@ -791,21 +859,58 @@ function openNickSheet(){
             <button class="btn del" style="padding:0 10px;height:32px;font-size:12px;" data-nickdel="${escapeHTML(nick)}">削除</button>
           </div>`).join("")
       : `<div style="color:var(--sub);font-size:13px;padding:10px 0;">まだ辞書がありません。TL取込の未マッチ名から自動登録されます。</div>`;
-    return `<h2>📖 あだ名辞書</h2>
+    const sk=loadSkillKeywords();
+    const skEntries=Object.entries(sk);
+    const skillEntries=skEntries.length
+      ? skEntries.map(([kw,real])=>
+          `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;">
+            <span style="flex:1;color:var(--txt);">${escapeHTML(kw)}</span>
+            <span style="color:var(--sub);">→</span>
+            <span style="flex:1;color:var(--accent);">${escapeHTML(real)}</span>
+            <button class="btn del" style="padding:0 10px;height:32px;font-size:12px;" data-skdel="${escapeHTML(kw)}">削除</button>
+          </div>`).join("")
+      : `<div style="color:var(--sub);font-size:13px;padding:10px 0;">まだ登録がありません。</div>`;
+    return `<h2>📖 辞書管理</h2>
+
+      <h3 style="font-size:14px;margin:14px 0 4px;">スキルキーワード</h3>
+      <p style="color:var(--sub);font-size:12px;margin:0 0 10px;">
+        「チャージ①」のようにキャラ名が書かれない行を、どのキャラの行として
+        扱うか設定します（文中にキーワードが含まれていれば適用）。
+        例: 「チャージ」→「アリス」
+      </p>
+      <div>${skillEntries}</div>
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        <input id="skKw" placeholder="キーワード（例: チャージ）" style="flex:1;min-width:0;">
+        <select id="skChar" style="flex:1;min-width:0;">${rosterOptions("")}</select>
+        <button class="btn primary" id="skAdd" style="padding:0 12px;">追加</button>
+      </div>
+
+      <h3 style="font-size:14px;margin:18px 0 4px;">あだ名辞書</h3>
       <p style="color:var(--sub);font-size:12px;margin:0 0 10px;">TL取込時に未マッチだった名前をロスターのキャラに紐付けた辞書です。</p>
       <div>${nickEntries}</div>
+
       <div class="sheet-actions" style="margin-top:14px;">
         <button class="btn ghost" id="nickClose">閉じる</button>
-        ${entries.length?'<button class="btn del" id="nickClearAll">すべて削除</button>':''}
+        ${entries.length?'<button class="btn del" id="nickClearAll">あだ名をすべて削除</button>':''}
       </div>`;
   }
   function bind(){
     sheet.querySelector("#nickClose").onclick=closeSheet;
     const ca=sheet.querySelector("#nickClearAll");
-    if(ca) ca.onclick=()=>{ if(!confirm("辞書をすべて削除しますか？")) return; saveNicknames({}); openSheet(body()); bind(); };
+    if(ca) ca.onclick=()=>{ if(!confirm("あだ名辞書をすべて削除しますか？")) return; saveNicknames({}); openSheet(body()); bind(); };
     sheet.querySelectorAll("[data-nickdel]").forEach(b=>b.onclick=()=>{
       const d=loadNicknames(); delete d[b.dataset.nickdel]; saveNicknames(d); openSheet(body()); bind();
     });
+    sheet.querySelectorAll("[data-skdel]").forEach(b=>b.onclick=()=>{
+      const d=loadSkillKeywords(); delete d[b.dataset.skdel]; saveSkillKeywords(d); openSheet(body()); bind();
+    });
+    sheet.querySelector("#skAdd").onclick=()=>{
+      const kw=sheet.querySelector("#skKw").value.trim();
+      const ch=sheet.querySelector("#skChar").value;
+      if(!kw||!ch) return;
+      const d=loadSkillKeywords(); d[kw]=ch; saveSkillKeywords(d);
+      openSheet(body()); bind();
+    };
   }
   openSheet(body()); bind();
 }
