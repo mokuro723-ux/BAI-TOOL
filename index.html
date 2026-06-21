@@ -153,6 +153,7 @@
     <button class="hicon" id="btnPinpGap" title="PinP用の余白を表示/非表示">⬓</button>
     <button class="hbtn" id="btnRoster">キャラ</button>
     <button class="hicon" id="btnImport" title="テキスト/画像からTLを取込">📋</button>
+    <button class="hicon" id="btnNick" title="あだ名辞書を管理">📖</button>
     <button class="hicon" id="btnUndo" title="元に戻す">↶</button>
     <button class="hicon" id="btnRedo" title="やり直し">↷</button>
   </div>
@@ -522,12 +523,34 @@ function circledToNum(ch){
   if(code>=0x2460 && code<=0x2473) return code-0x2460+1; // ①-⑳
   return null;
 }
+/* ===== あだ名辞書 ===== */
+const NICK_KEY = "bai-tool-nicknames";
+function loadNicknames(){ try{ return JSON.parse(localStorage.getItem(NICK_KEY)||"{}"); }catch(e){ return {}; } }
+function saveNicknames(d){ localStorage.setItem(NICK_KEY, JSON.stringify(d)); }
+// あだ名を正式名に解決（辞書にあればそちら優先）
+function resolveNickname(name){
+  const d=loadNicknames();
+  return d[name] || name;
+}
+
 function findRosterChar(name){
   if(!name) return null;
-  let c=state.roster.find(x=>x.name===name);
+  // 1. あだ名辞書で正式名に変換してから照合
+  const resolved=resolveNickname(name);
+  let c=state.roster.find(x=>x.name===resolved);
   if(c) return c;
+  // 2. 完全一致
+  c=state.roster.find(x=>x.name===name);
+  if(c) return c;
+  // 3. 前方一致
   c=state.roster.find(x=>x.name && name.startsWith(x.name));
-  return c||null;
+  if(c) return c;
+  // 4. ロスターに「同じベース名」のキャラが1件だけなら確定マッチ
+  //    例: ロスターに「アリス(臨戦)」のみ → 「アリス」で一致
+  const base=name.replace(/[（(].+$/,"").trim();
+  const candidates=state.roster.filter(x=>x.name && x.name.replace(/[（(].+$/,"").trim()===base);
+  if(candidates.length===1) return candidates[0];
+  return null;
 }
 // セグメント本文(キャラ名候補1つ分)を「ロスター名 + 残り文字列」に分解する。
 // 残り文字列に丸数字が1つ以上含まれていれば、そのキャラを丸数字の個数だけ
@@ -657,12 +680,41 @@ function openImportSheet(){
     const {rows,unmatched}=parseTLImportText(ta.value);
     if(!rows.length){ preview.innerHTML="<p style='color:var(--sub)'>解析できる内容がありませんでした。</p>"; return; }
     const list=rows.map(r=>`<div style="padding:6px 0; border-bottom:1px solid var(--line); font-size:13px;">${rowPreviewHTML(r)}</div>`).join("");
-    const warn=unmatched.length?`<p style="color:var(--danger); font-size:12px;">ロスター未登録のため未配置（メモのみ）: ${escapeHTML(unmatched.join("、"))}</p>`:"";
-    preview.innerHTML=`<h3 style="margin:14px 0 6px; font-size:14px;">プレビュー（${rows.length}行）</h3>${warn}
-      <div style="max-height:240px; overflow:auto; border:1px solid var(--line); border-radius:8px; padding:6px 10px;">${list}</div>
+    // 未マッチ名: ロスター選択 + 辞書登録UI
+    let nickHTML="";
+    if(unmatched.length){
+      const rOpts=state.roster.map(c=>`<option value="${escapeHTML(c.name)}">${escapeHTML(c.name)}</option>`).join("");
+      const nickRows=unmatched.map(nm=>
+        `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:13px;">
+          <span style="color:var(--danger);flex:0 0 auto;">${escapeHTML(nm)}</span>
+          <span style="color:var(--sub);flex:0 0 auto;">→</span>
+          <select data-nick="${escapeHTML(nm)}" style="flex:1;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:4px 6px;font-size:13px;">
+            <option value="">（無視）</option>${rOpts}
+          </select>
+        </div>`).join("");
+      nickHTML=`<div style="margin:10px 0;padding:10px;background:var(--panel2);border-radius:10px;">
+        <div style="font-size:12px;color:var(--sub);margin-bottom:6px;">未マッチ名を誰かに紐付け（辞書に覚えさせる）</div>
+        ${nickRows}
+        <button class="btn ghost" id="impSaveNick" style="margin-top:8px;width:100%;font-size:13px;">紐付けを辞書に保存して再解析</button>
+      </div>`;
+    }
+    preview.innerHTML=`<h3 style="margin:14px 0 6px; font-size:14px;">プレビュー（${rows.length}行）</h3>
+      ${nickHTML}
+      <div style="max-height:200px; overflow:auto; border:1px solid var(--line); border-radius:8px; padding:6px 10px;">${list}</div>
       <div class="sheet-actions" style="margin-top:10px">
         <button class="btn primary" id="impApply" style="width:100%">この内容をTLの末尾に追加</button>
       </div>`;
+    // 辞書保存 → 再解析
+    const saveNickBtn=preview.querySelector("#impSaveNick");
+    if(saveNickBtn) saveNickBtn.onclick=()=>{
+      const d=loadNicknames();
+      preview.querySelectorAll("[data-nick]").forEach(sel=>{
+        const nick=sel.dataset.nick, target=sel.value;
+        if(target) d[nick]=target;
+      });
+      saveNicknames(d);
+      sheet.querySelector("#impParse").click(); // 再解析
+    };
     preview.querySelector("#impApply").onclick=()=>{
       snapshotHistory();
       state.rows.push(...rows);
@@ -673,6 +725,40 @@ function openImportSheet(){
   sheet.querySelector("#impClose").onclick=closeSheet;
 }
 document.getElementById("btnImport").onclick=openImportSheet;
+
+/* ===== あだ名管理シート ===== */
+function openNickSheet(){
+  function body(){
+    const d=loadNicknames();
+    const entries=Object.entries(d);
+    const nickEntries=entries.length
+      ? entries.map(([nick,real])=>
+          `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;">
+            <span style="flex:1;color:var(--txt);">${escapeHTML(nick)}</span>
+            <span style="color:var(--sub);">→</span>
+            <span style="flex:1;color:var(--accent);">${escapeHTML(real)}</span>
+            <button class="btn del" style="padding:0 10px;height:32px;font-size:12px;" data-nickdel="${escapeHTML(nick)}">削除</button>
+          </div>`).join("")
+      : `<div style="color:var(--sub);font-size:13px;padding:10px 0;">まだ辞書がありません。TL取込の未マッチ名から自動登録されます。</div>`;
+    return `<h2>📖 あだ名辞書</h2>
+      <p style="color:var(--sub);font-size:12px;margin:0 0 10px;">TL取込時に未マッチだった名前をロスターのキャラに紐付けた辞書です。</p>
+      <div>${nickEntries}</div>
+      <div class="sheet-actions" style="margin-top:14px;">
+        <button class="btn ghost" id="nickClose">閉じる</button>
+        ${entries.length?'<button class="btn del" id="nickClearAll">すべて削除</button>':''}
+      </div>`;
+  }
+  function bind(){
+    sheet.querySelector("#nickClose").onclick=closeSheet;
+    const ca=sheet.querySelector("#nickClearAll");
+    if(ca) ca.onclick=()=>{ if(!confirm("辞書をすべて削除しますか？")) return; saveNicknames({}); openSheet(body()); bind(); };
+    sheet.querySelectorAll("[data-nickdel]").forEach(b=>b.onclick=()=>{
+      const d=loadNicknames(); delete d[b.dataset.nickdel]; saveNicknames(d); openSheet(body()); bind();
+    });
+  }
+  openSheet(body()); bind();
+}
+document.getElementById("btnNick").onclick=openNickSheet;
 
 /* ===== title ===== */
 document.getElementById("title").oninput=e=>{ state.title=e.target.value; save(); };
