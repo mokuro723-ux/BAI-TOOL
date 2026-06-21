@@ -507,6 +507,9 @@ function splitMarker(seg){
   let advanced=true;
   while(advanced){
     advanced=false;
+    // 丸数字（①-⑳・⓪）をコスト数字として取り込む
+    const circM=[...rest][0];
+    if(circM!=null && circledToNum(circM)!=null){ marker+=circM; rest=rest.slice(circM.length); advanced=true; continue; }
     const numM=rest.match(/^[0-9０-９]+/);
     if(numM){ marker+=numM[0]; rest=rest.slice(numM[0].length); advanced=true; continue; }
     for(const tk of MARK_TOKENS){
@@ -630,10 +633,9 @@ function parseTLImportText(text){
           }
           const parsed=splitNameAndBadges(nm);
           if(parsed){
-            // suffix（「チャージ」等）はセルの mark に入れて左上ラベルとして表示
-            const markLabel=parsed.suffix ? parsed.suffix.slice(0,3) : null;
+            // splitNameAndBadges が返す mark（Cプレフィックス+suffix）をそのまま使う
             for(const b of parsed.badges){
-              const cell={charId:parsed.char.id, badge:b, mark:markLabel};
+              const cell={charId:parsed.char.id, badge:b, mark:parsed.mark};
               row.cells.push(cell); lastCellOfRow=cell;
             }
             lastChar=parsed.char;
@@ -648,7 +650,7 @@ function parseTLImportText(text){
               const cell={charId:lastChar.id, badge:b, mark:nmLabel};
               row.cells.push(cell); lastCellOfRow=cell;
             }
-            memoParts.push(nm);
+            // (suffix はセルの mark に表示済みのためメモには追加しない)
           }else{
             memoParts.push(nm); unmatched.push(nm);
           }
