@@ -535,21 +535,25 @@ function resolveNickname(name){
 
 function findRosterChar(name){
   if(!name) return null;
-  // 1. あだ名辞書で正式名に変換してから照合
+  // 1. あだ名辞書で正式名に変換してから完全一致
   const resolved=resolveNickname(name);
   let c=state.roster.find(x=>x.name===resolved);
   if(c) return c;
   // 2. 完全一致
   c=state.roster.find(x=>x.name===name);
   if(c) return c;
-  // 3. 前方一致
-  c=state.roster.find(x=>x.name && name.startsWith(x.name));
-  if(c) return c;
-  // 4. ロスターに「同じベース名」のキャラが1件だけなら確定マッチ
-  //    例: ロスターに「アリス(臨戦)」のみ → 「アリス」で一致
+  // 3. 入力がロスター名で始まる（例: "アリスチャージ" → "アリス(臨戦)" に前方一致）
+  //    最長一致優先
+  const fwd=state.roster.filter(x=>x.name && name.startsWith(x.name))
+    .sort((a,b)=>b.name.length-a.name.length);
+  if(fwd.length) return fwd[0];
+  // 4. ベース名（括弧前）が一致するキャラがロスターに1件だけなら確定マッチ
+  //    例: ロスターに「アリス(臨戦)」のみ → 「アリス」で確定
   const base=name.replace(/[（(].+$/,"").trim();
-  const candidates=state.roster.filter(x=>x.name && x.name.replace(/[（(].+$/,"").trim()===base);
-  if(candidates.length===1) return candidates[0];
+  if(base){
+    const candidates=state.roster.filter(x=>x.name && x.name.replace(/[（(].+$/,"").trim()===base);
+    if(candidates.length===1) return candidates[0];
+  }
   return null;
 }
 // セグメント本文(キャラ名候補1つ分)を「ロスター名 + 残り文字列」に分解する。
@@ -607,19 +611,22 @@ function parseTLImportText(text){
           }
           const parsed=splitNameAndBadges(nm);
           if(parsed){
+            // suffix（「チャージ」等）はセルの mark に入れて左上ラベルとして表示
+            const markLabel=parsed.suffix ? parsed.suffix.slice(0,3) : null;
             for(const b of parsed.badges){
-              const cell={charId:parsed.char.id, badge:b, mark:null};
+              const cell={charId:parsed.char.id, badge:b, mark:markLabel};
               row.cells.push(cell); lastCellOfRow=cell;
             }
             lastChar=parsed.char;
-            if(parsed.suffix) memoParts.push(parsed.suffix);
           }else if(lastChar){
             // ロスター名と一致しない単独セグメント＝直前キャラのスキル名省略行とみなす。
             // 末尾に丸数字が付いていれば badge として拾う（例: "チャージ①" → badge=1）
             const circledInNm=[...nm].filter(ch=>circledToNum(ch)!=null).map(circledToNum);
             const badges=circledInNm.length?circledInNm:[null];
+            // 丸数字を除いた残りをラベルとして左上に表示（例: "チャージ①" → "チャ"）
+            const nmLabel=nm.replace(/[\u2460-\u2473\u24EA]/g,"").trim().slice(0,3)||null;
             for(const b of badges){
-              const cell={charId:lastChar.id, badge:b, mark:null};
+              const cell={charId:lastChar.id, badge:b, mark:nmLabel};
               row.cells.push(cell); lastCellOfRow=cell;
             }
             memoParts.push(nm);
