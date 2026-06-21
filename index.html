@@ -500,7 +500,7 @@ function loadTesseract(){
 const MARK_TOKENS=["AUTO即","後掛即","ギブアップ","AUTO","後掛","NS","即","※"];
 // 行頭がこれらの記号の場合、プレイヤーへの注意書き（TL本体ではない）とみなし、
 // キャラ名省略行の自動配置（直前キャラの引き継ぎ）は行わずメモ欄にそのまま入れる。
-const NOTE_PREFIXES=["※","★","・","#","注意","注","メモ","Memo","memo"];
+const NOTE_PREFIXES=["★","・","#","注意","注","メモ","Memo","memo"]; // ※はMARK_TOKENSで処理するためここには含めない
 function isNoteLine(line){ return NOTE_PREFIXES.some(p=>line.startsWith(p)); }
 function splitMarker(seg){
   let rest=seg, marker="";
@@ -615,28 +615,29 @@ function parseTLImportText(text){
       const num=numM?numM[0]:"";
       // markerText: コスト数字（丸数字含む）とMARK_TOKENSを除いた残り（通常は空）
       const markerText=marker.replace(/[0-9０-９\u2460-\u2473\u24EA]+/g,"").replace(new RegExp(MARK_TOKENS.map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|"),"g"),"").trim();
+      // MARK_TOKENSの部分（AUTO即等）: キャラ配置がある場合は行のメモに補足、ない場合はメモ欄に入れる
+      const markerLabel=marker.replace(/[0-9０-９\u2460-\u2473\u24EA]+/g,"").trim();
       // 末尾の "〆"（おしまい印）は専用トークンとして保持する（削除しない）
       let body=rest;
       let endMark=false;
       if(/[〆]$/.test(body)){ endMark=true; body=body.replace(/[〆]$/,"").trim(); }
       const names=body.split(/[,、]/).map(s=>s.trim()).filter(Boolean);
       const row=newRow(); row.num=num;
-      const memoParts=[]; if(markerText) memoParts.push(markerText);
+      const memoParts=[]; if(markerText) memoParts.push(markerText); if(markerLabel) memoParts.push(markerLabel);
       // rest にキャラ名が含まれず、スキル名のみ（例:「チャージ①」）かつ lastChar がいれば
-      // そのキャラ継続としてセル追加し、スキル名を左上ラベルにする
+      // 前の行（rows末尾）にセルを追加する（別行にしない）
       if(!noteLine && names.length===1 && lastChar && !findRosterChar(names[0])){
         const nm=names[0];
         const circledInNm=[...nm].filter(ch=>circledToNum(ch)!=null).map(circledToNum);
         const badges=circledInNm.length?circledInNm:[null];
         const nmLabel=nm.replace(/[\u2460-\u2473\u24EA]/g,"").trim().slice(0,3)||null;
-        for(const b of badges){
-          const cell={charId:lastChar.id, badge:b, mark:nmLabel};
-          row.cells.push(cell);
+        const targetRow=rows.length?rows[rows.length-1]:null;
+        if(targetRow){
+          for(const b of badges) targetRow.cells.push({charId:lastChar.id, badge:b, mark:nmLabel});
+          // コストがあれば上書き（例: ⑤ チャージ① → コスト5をその行に）
+          if(num) targetRow.num=num;
         }
-        if(endMark) memoParts.push("〆");
-        row.memo=memoParts.join(" ");
-        rows.push(row);
-        continue; // 以降の names ループをスキップ
+        continue; // 新規行は作らない
       }
       if(!names.length && body) memoParts.push(body); // 記号のみ等、キャラ名が無い行はメモへ
       if(noteLine){
