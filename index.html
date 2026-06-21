@@ -560,13 +560,32 @@ function findRosterChar(name){
 // 残り文字列に丸数字が1つ以上含まれていれば、そのキャラを丸数字の個数だけ
 // 複製してそれぞれにbadge(半角数字)を割り当てる（例: "アリスチャージ①②" → アリス×2、badge=1,2）。
 function splitNameAndBadges(body){
-  const c=findRosterChar(body);
-  if(!c) return null;
-  const restRaw=body.slice(c.name.length);
+  // 行頭の「C」「Ｃ」はコピー能力の印。除いてからキャラ名照合し、mark に返す
+  let copyPrefix=null;
+  let bodyWork=body;
+  if(/^(コピー|©︎|©)/.test(bodyWork)){ copyPrefix="C"; bodyWork=bodyWork.replace(/^(コピー|©︎|©)/,"").trim(); }
+  else if(/^[CＣ]/.test(bodyWork)){ copyPrefix="C"; bodyWork=bodyWork.slice(1); }
+  const c=findRosterChar(bodyWork);
+  if(!c){
+    // プレフィックスなしで再試行（"Cアリス" のCがキャラ名の一部の場合を除外済み）
+    if(!copyPrefix) return null;
+    const c2=findRosterChar(body); // プレフィックスなし原文でも試す
+    if(!c2) return null;
+    const restRaw2=body.slice(c2.name.length);
+    const circledChars2=[...restRaw2].filter(ch=>circledToNum(ch)!=null);
+    const badges2=circledChars2.length?circledChars2.map(circledToNum):[null];
+    const suffix2=restRaw2.replace(/[\u2460-\u2473\u24EA]/g,"").trim();
+    const markLabel2=[suffix2.slice(0,2)].filter(Boolean).join("")||null;
+    return { char:c2, suffix:suffix2, badges:badges2, mark:markLabel2 };
+  }
+  const restRaw=bodyWork.slice(c.name.length);
   const circledChars=[...restRaw].filter(ch=>circledToNum(ch)!=null);
   const badges = circledChars.length ? circledChars.map(circledToNum) : [null];
   const suffix = restRaw.replace(/[\u2460-\u2473\u24EA]/g,"").trim();
-  return { char:c, suffix, badges };
+  // mark: Cプレフィックス + suffix（最大3文字）
+  const markParts=[copyPrefix, suffix.slice(0,2)].filter(Boolean);
+  const markLabel=markParts.length ? markParts.join("") : null;
+  return { char:c, suffix, badges, mark:markLabel };
 }
 function parseTLImportText(text){
   const lines=(text||"").replace(/\r/g,"").split("\n");
