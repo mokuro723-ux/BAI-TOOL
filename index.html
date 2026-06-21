@@ -152,6 +152,7 @@
     <input id="title" placeholder="タイトル（例: ホバークラフト TMT 2凸 前半）">
     <button class="hicon" id="btnPinpGap" title="PinP用の余白を表示/非表示">⬓</button>
     <button class="hbtn" id="btnRoster">キャラ</button>
+    <button class="hicon" id="btnImport" title="テキスト/画像からTLを取込">📋</button>
     <button class="hicon" id="btnUndo" title="元に戻す">↶</button>
     <button class="hicon" id="btnRedo" title="やり直し">↷</button>
   </div>
@@ -462,6 +463,148 @@ document.getElementById("btnUp").onclick=()=>moveRow(-1);
 document.getElementById("btnDown").onclick=()=>moveRow(1);
 function moveRow(d){ const i=state.rows.findIndex(r=>r.id===state.activeId); const j=i+d;
   if(i<0||j<0||j>=state.rows.length) return; snapshotHistory(); const a=state.rows; [a[i],a[j]]=[a[j],a[i]]; save(); renderTable(); }
+
+/* ===== TL取込（テキスト貼り付け / 画像OCR → 自動パース） =====
+   方針:
+   ・テキスト貼り付けはOCR不要・即パース（精度ほぼ100%）。
+   ・画像は Tesseract.js（外部CDN、ユーザー承認済み・容量数MB）で文字認識し、
+     認識結果をテキストエリアに展開→必ず人が見てから「解析→反映」する（OCR誤読対策）。
+   ・「AUTO/即/後掛/※/NS/ギブアップ」等の記号は今回は暫定でメモ欄にそのまま残す
+     （将来的に専用表示欄を作る予定。 by ユーザー要望 2026-06）。
+   ・キャラ名は現在のロスター(state.roster)に対して完全一致→前方一致で照合。
+     ロスターに未設定のキャラ名はメモ欄にテキストとして残し、未配置のままにする
+     （ユーザー運用: TL作成前にロスターへ手動でキャラを入れておく前提）。
+   ・1行内の "→" はステップ区切りとして複数行(row)に分割する。
+   ・空行は空のrow（段落区切り）として扱う。
+*/
+let tesseractLoadPromise=null;
+function loadTesseract(){
+  if(window.Tesseract) return Promise.resolve();
+  if(tesseractLoadPromise) return tesseractLoadPromise;
+  tesseractLoadPromise=new Promise((resolve,reject)=>{
+    const s=document.createElement("script");
+    s.src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+    s.onload=()=>resolve(); s.onerror=()=>reject(new Error("Tesseract.jsの読み込みに失敗しました"));
+    document.head.appendChild(s);
+  });
+  return tesseractLoadPromise;
+}
+const MARK_TOKENS=["AUTO即","後掛即","ギブアップ","AUTO","後掛","NS","即","※"];
+function splitMarker(seg){
+  let rest=seg, marker="";
+  let advanced=true;
+  while(advanced){
+    advanced=false;
+    const numM=rest.match(/^[0-9０-９]+/);
+    if(numM){ marker+=numM[0]; rest=rest.slice(numM[0].length); advanced=true; continue; }
+    for(const tk of MARK_TOKENS){
+      if(rest.startsWith(tk)){ marker+=tk; rest=rest.slice(tk.length); advanced=true; break; }
+    }
+  }
+  return { marker: marker.trim(), rest: rest.trim() };
+}
+function zenkakuToNum(s){ return (s||"").replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)); }
+function findRosterChar(name){
+  if(!name) return null;
+  let c=state.roster.find(x=>x.name===name);
+  if(c) return c;
+  c=state.roster.find(x=>x.name && name.startsWith(x.name));
+  return c||null;
+}
+function parseTLImportText(text){
+  const lines=(text||"").replace(/\r/g,"").split("\n");
+  const rows=[]; const unmatched=[];
+  for(const raw of lines){
+    const line=raw.trim();
+    if(!line){ rows.push(newRow()); continue; }
+    const segs=line.split("→").map(s=>s.trim()).filter(Boolean);
+    for(const seg of segs){
+      const {marker,rest}=splitMarker(seg);
+      const numM=zenkakuToNum(marker).match(/[0-9]+/);
+      const num=numM?numM[0]:"";
+      const markerText=marker.replace(/[0-9０-９]+/,"").trim();
+      let body=rest.replace(/[〆]$/,"").trim();
+      const names=body.split(/[,、]/).map(s=>s.trim()).filter(Boolean);
+      const row=newRow(); row.num=num;
+      const memoParts=[]; if(markerText) memoParts.push(markerText);
+      if(!names.length && body) memoParts.push(body); // 記号のみ等、キャラ名が無い行はメモへ
+      for(const nm of names){
+        const c=findRosterChar(nm);
+        if(c){
+          row.cells.push({charId:c.id, badge:null, mark:null});
+          const suffix=nm.slice(c.name.length).trim();
+          if(suffix) memoParts.push(suffix);
+        }else{
+          memoParts.push(nm); unmatched.push(nm);
+        }
+      }
+      row.memo=memoParts.join(" ");
+      rows.push(row);
+    }
+  }
+  return { rows, unmatched:[...new Set(unmatched)] };
+}
+function rowPreviewHTML(row){
+  const names=row.cells.map(c=>{ const ch=state.roster.find(r=>r.id===c.charId); return ch?ch.name:"?"; }).join("・");
+  const parts=[row.num, names, row.memo].filter(Boolean);
+  return escapeHTML(parts.join(" / ") || "（空行）");
+}
+function openImportSheet(){
+  openSheet(`<h2>TL取込</h2>
+    <p style="color:var(--sub); font-size:13px; margin:0 0 10px">
+      Discord/X等のテキストはそのまま貼り付け。画像しかない場合は下の「画像から読込」で
+      文字認識→このテキスト欄に展開されるので、内容を確認・修正してから「解析→反映」を押してください。
+      キャラ名は今のロスターに登録済みの名前で自動照合します。
+    </p>
+    <div class="field"><textarea id="impText" rows="8" style="width:100%; box-sizing:border-box; font-size:14px;" placeholder="ここにテキストを貼り付け、または画像から読込"></textarea></div>
+    <div class="field" style="display:flex; gap:8px; align-items:center;">
+      <label class="btn ghost" style="display:flex;align-items:center;justify-content:center;height:48px; flex:1;">
+        画像から読込<input type="file" id="impFile" accept="image/*" style="display:none">
+      </label>
+      <span id="impOcrStatus" style="font-size:12px; color:var(--sub);"></span>
+    </div>
+    <div id="impPreview"></div>
+    <div class="sheet-actions">
+      <button class="btn ghost" id="impClose">閉じる</button>
+      <button class="btn primary" id="impParse">解析→反映</button>
+    </div>`);
+  const ta=sheet.querySelector("#impText");
+  const file=sheet.querySelector("#impFile");
+  const status=sheet.querySelector("#impOcrStatus");
+  const preview=sheet.querySelector("#impPreview");
+  file.onchange=async()=>{
+    const f=file.files[0]; if(!f) return;
+    status.textContent="ライブラリ読込中…";
+    try{
+      await loadTesseract();
+      status.textContent="文字認識中…(数十秒かかる場合があります)";
+      const res=await window.Tesseract.recognize(f, "jpn+eng");
+      ta.value=(res.data && res.data.text || "").trim();
+      status.textContent="認識完了。内容を確認・修正してください。";
+    }catch(e){
+      status.textContent="OCRに失敗しました: "+e.message;
+    }
+  };
+  sheet.querySelector("#impParse").onclick=()=>{
+    const {rows,unmatched}=parseTLImportText(ta.value);
+    if(!rows.length){ preview.innerHTML="<p style='color:var(--sub)'>解析できる内容がありませんでした。</p>"; return; }
+    const list=rows.map(r=>`<div style="padding:6px 0; border-bottom:1px solid var(--line); font-size:13px;">${rowPreviewHTML(r)}</div>`).join("");
+    const warn=unmatched.length?`<p style="color:var(--danger); font-size:12px;">ロスター未登録のため未配置（メモのみ）: ${escapeHTML(unmatched.join("、"))}</p>`:"";
+    preview.innerHTML=`<h3 style="margin:14px 0 6px; font-size:14px;">プレビュー（${rows.length}行）</h3>${warn}
+      <div style="max-height:240px; overflow:auto; border:1px solid var(--line); border-radius:8px; padding:6px 10px;">${list}</div>
+      <div class="sheet-actions" style="margin-top:10px">
+        <button class="btn primary" id="impApply" style="width:100%">この内容をTLの末尾に追加</button>
+      </div>`;
+    preview.querySelector("#impApply").onclick=()=>{
+      snapshotHistory();
+      state.rows.push(...rows);
+      state.activeId=rows[rows.length-1].id;
+      save(); renderTable(); closeSheet();
+    };
+  };
+  sheet.querySelector("#impClose").onclick=closeSheet;
+}
+document.getElementById("btnImport").onclick=openImportSheet;
 
 /* ===== title ===== */
 document.getElementById("title").oninput=e=>{ state.title=e.target.value; save(); };
