@@ -631,6 +631,15 @@ function rowMarkerAbbr(markerLabel){
 }
 function splitBodyIntoSegments(body){
   if(!body) return { segNames:[], freeText:"", backNames:new Set(), abbrByName:new Map() };
+  // 特別処理: ロスター名に空白なしで直接続く「NS」は、後続テキストの接頭マーカーではなく
+  // そのキャラ自身の直後ラベル（接尾）として扱う（例:"アリスNS"→アリスに"NS"ラベル）。
+  // AUTO/即/後掛等は逆に「次に来る名前」へ適用される接頭マーカーなので扱いが異なる。
+  const nsSuffixNames=new Set();
+  for(const c of state.roster){
+    if(!c.name) continue;
+    const re=new RegExp(c.name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"NS");
+    if(re.test(body)) nsSuffixNames.add(c.name);
+  }
   // MARK_TOKENS（長い順）のいずれかの直前で区切り記号を挿入して分割する。
   // ※ split/joinをトークンごとに繰り返すと、「後掛即」のような長いトークンが
   //   後から処理される短いトークン（「後掛」「即」）によって二重に割られてしまうため、
@@ -653,6 +662,12 @@ function splitBodyIntoSegments(body){
       }
       else freeParts.push(p);
     }
+  }
+  // NS接尾の反映（既に他のラベルが付いていれば追記、無ければ"NS"を付与）
+  for(const nm of nsSuffixNames){
+    if(!segNames.includes(nm)) continue;
+    const prev=abbrByName.get(nm);
+    abbrByName.set(nm, prev?prev+"NS":"NS");
   }
   return { segNames, freeText:freeParts.join(" "), backNames, abbrByName };
 }
@@ -708,6 +723,36 @@ function parseTLImportText(text){
       // セルが1つも置かれない行（記号のみ・キャラ名なし）の場合だけメモに残す（下記で判定して追記）。
       const memoParts=[];
       if(extraFreeText) memoParts.push(extraFreeText);
+      // 行中にマーカーを挟んで複数キャラ名が出てくる場合（例:"キサキ即クルミ"）、
+      // 「通常攻撃1発後」のような共有の自由文コンテキストも「後掛」によるまとめも無ければ、
+      // それぞれ別々の拍（行）とみなして行を分割する（圧縮しすぎを防ぐ）。
+      // 例外: 自由文（extraFreeText）や後掛（backNames）が絡む場合は、同じ拍とみなして
+      // 1行にまとめる（従来通り）。
+      if(midTokenHit && !noteLine && !extraFreeText && backNames.size===0 && names.length>1){
+        let first=true;
+        for(const nm of names){
+          const nr=newRow(); if(first){ nr.num=num; first=false; }
+          const parsed=splitNameAndBadges(nm);
+          if(parsed){
+            const markForCell=cellMark(nm, parsed.mark);
+            for(const b of parsed.badges) nr.cells.push({charId:parsed.char.id, badge:b, mark:markForCell});
+            lastChar=parsed.char;
+          }else{
+            const kwChar=resolveSkillKeyword(nm);
+            const hasCircled=[...nm].some(ch=>circledToNum(ch)!=null);
+            const targetChar=kwChar||(hasCircled?lastChar:null);
+            if(targetChar){
+              const circledInNm=[...nm].filter(ch=>circledToNum(ch)!=null).map(circledToNum);
+              const badges=circledInNm.length?circledInNm:[null];
+              const nmLabel=nm.replace(/[\u2460-\u2473\u24EA]/g,"").trim().slice(0,3)||null;
+              const markForCell=cellMark(nm, nmLabel);
+              for(const b of badges) nr.cells.push({charId:targetChar.id, badge:b, mark:markForCell});
+            }
+          }
+          rows.push(nr);
+        }
+        continue;
+      }
       // rest にキャラ名が含まれず、丸数字付きスキル名（例:「チャージ①」）または
       // スキルキーワード辞書に一致する場合のみ「スキル名省略行」とみなし、
       // 1) スキルキーワード辞書に一致すればそのキャラ 2) なければ lastChar
