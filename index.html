@@ -623,27 +623,38 @@ function splitNameAndBadges(body){
 // 直前でも分割し、それぞれを独立したキャラ名候補にする。
 // 例: "即 カヨコ 即キサキ" → ["カヨコ","キサキ"]（各塊の先頭マーカーは剥がす）
 //     "通常攻撃1発後 即 カヨコ" → 先頭の自由文塊（マーカーもキャラ名候補も含まない）は破棄せずメモへ
+// 行頭/チャンク先頭マーカー文字列を、アイコン左上に出す短い略記に変換する。
+// 「後掛」は←マークで別途表現するためここでは取り除く。
+function rowMarkerAbbr(markerLabel){
+  if(!markerLabel) return "";
+  return markerLabel.replace(/後掛/g,"").replace(/AUTO/g,"A").trim();
+}
 function splitBodyIntoSegments(body){
-  if(!body) return { segNames:[], freeText:"" };
-  // MARK_TOKENS（長い順）のいずれかの直前で改行記号を挿入して分割する
+  if(!body) return { segNames:[], freeText:"", backNames:new Set(), abbrByName:new Map() };
+  // MARK_TOKENS（長い順）のいずれかの直前で区切り記号を挿入して分割する。
+  // ※ split/joinをトークンごとに繰り返すと、「後掛即」のような長いトークンが
+  //   後から処理される短いトークン（「後掛」「即」）によって二重に割られてしまうため、
+  //   1回の正規表現パスでまとめて処理する（最長一致を優先）。
   const tokens=[...MARK_TOKENS].sort((a,b)=>b.length-a.length);
-  let marked=body;
-  for(const tk of tokens){
-    marked=marked.split(tk).join("\u0001"+tk);
-  }
+  const tokenRe=new RegExp(tokens.map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|"),"g");
+  const marked=body.replace(tokenRe, m=>"\u0001"+m);
   const chunks=marked.split("\u0001").map(s=>s.trim()).filter(Boolean);
-  const segNames=[]; const freeParts=[];
+  const segNames=[]; const freeParts=[]; const backNames=new Set(); const abbrByName=new Map();
   for(const chunk of chunks){
-    const {rest:chunkRest}=splitMarker(chunk); // 各塊の先頭マーカーを剥がす
+    const {marker:chunkMarker, rest:chunkRest}=splitMarker(chunk); // 各塊の先頭マーカーを剥がす
     if(!chunkRest) continue;
+    const isBack=chunkMarker.includes("後掛"); // このチャンクが「後掛」配下か
+    const chunkAbbr=rowMarkerAbbr(chunkMarker); // このチャンクのマーカー略記（例:"A即","NS"）
     // スペース区切りで複数キャラ名が並ぶ可能性があるため、カンマ/読点/スペースで分割
     const parts=chunkRest.split(/[,、\s]+/).map(s=>s.trim()).filter(Boolean);
     for(const p of parts){
-      if(findRosterChar(p) || resolveSkillKeyword(p)) segNames.push(p);
+      if(findRosterChar(p) || resolveSkillKeyword(p)){
+        segNames.push(p); if(isBack) backNames.add(p); if(chunkAbbr) abbrByName.set(p, chunkAbbr);
+      }
       else freeParts.push(p);
     }
   }
-  return { segNames, freeText:freeParts.join(" ") };
+  return { segNames, freeText:freeParts.join(" "), backNames, abbrByName };
 }
 function parseTLImportText(text){
   const lines=(text||"").replace(/\r/g,"").split("\n");
@@ -675,15 +686,27 @@ function parseTLImportText(text){
       // （例: "通常攻撃1発後 即 カヨコ 即キサキ"）は、マーカー単語の前で
       // サブセグメントに分割してキャラ名候補を拾い直す。
       const midTokenHit=[...MARK_TOKENS].sort((a,b)=>b.length-a.length).find(tk=>body.includes(tk));
-      let names, extraFreeText="";
+      let names, extraFreeText="", backNames=new Set(), abbrByName=new Map();
       if(midTokenHit){
-        const {segNames,freeText}=splitBodyIntoSegments(body);
-        names=segNames; extraFreeText=freeText;
+        const r=splitBodyIntoSegments(body);
+        names=r.segNames; extraFreeText=r.freeText; backNames=r.backNames||new Set(); abbrByName=r.abbrByName||new Map();
       }else{
         names=body.split(/[,、]/).map(s=>s.trim()).filter(Boolean);
       }
+      // 行頭マーカーそのものが「後掛」を含む場合（例:"後掛即 ナギサ"）は行全体が後掛対象
+      const topIsBack=markerLabel.includes("後掛");
+      // 行頭マーカーの略記（例:"AUTO即"→"A即"、"NS"→"NS"）。アイコン左上ラベルのフォールバックに使う。
+      const markerAbbr=rowMarkerAbbr(markerLabel);
+      // 優先順位: 1)後掛→「←」 2)スキル名由来のラベル(例:"チャ") 3)その行/チャンクのマーカー略記
+      function cellMark(nm, fallbackMark){
+        if(topIsBack||backNames.has(nm)) return "←";
+        if(fallbackMark) return fallbackMark;
+        return abbrByName.get(nm) || markerAbbr || null;
+      }
       const row=newRow(); row.num=num;
-      const memoParts=[]; if(markerText) memoParts.push(markerText); if(markerLabel) memoParts.push(markerLabel);
+      // markerText/markerLabelはアイコン左上に表示できた場合は重複するメモへは入れない。
+      // セルが1つも置かれない行（記号のみ・キャラ名なし）の場合だけメモに残す（下記で判定して追記）。
+      const memoParts=[];
       if(extraFreeText) memoParts.push(extraFreeText);
       // rest にキャラ名が含まれず、丸数字付きスキル名（例:「チャージ①」）または
       // スキルキーワード辞書に一致する場合のみ「スキル名省略行」とみなし、
@@ -702,7 +725,8 @@ function parseTLImportText(text){
           const nmLabel=nm.replace(/[\u2460-\u2473\u24EA]/g,"").trim().slice(0,3)||null;
           const targetRow=rows.length?rows[rows.length-1]:null;
           if(targetRow){
-            for(const b of badges) targetRow.cells.push({charId:targetChar.id, badge:b, mark:nmLabel});
+            const cellMarkLabel=cellMark(nm, nmLabel);
+            for(const b of badges) targetRow.cells.push({charId:targetChar.id, badge:b, mark:cellMarkLabel});
             // コストがあれば上書き（例: ⑤ チャージ① → コスト5をその行に）
             if(num) targetRow.num=num;
             // この行のmarker/自由文（例:"NS","発射確認"）は捨てずに直前行のメモへ追記する
@@ -729,9 +753,10 @@ function parseTLImportText(text){
           }
           const parsed=splitNameAndBadges(nm);
           if(parsed){
-            // splitNameAndBadges が返す mark（Cプレフィックス+suffix）をそのまま使う
+            // splitNameAndBadges が返す mark（Cプレフィックス+suffix）に、後掛なら「←」を優先適用
+            const markForCell=cellMark(nm, parsed.mark);
             for(const b of parsed.badges){
-              const cell={charId:parsed.char.id, badge:b, mark:parsed.mark};
+              const cell={charId:parsed.char.id, badge:b, mark:markForCell};
               row.cells.push(cell); lastCellOfRow=cell;
             }
             lastChar=parsed.char;
@@ -750,8 +775,9 @@ function parseTLImportText(text){
               const badges=circledInNm.length?circledInNm:[null];
               // 丸数字を除いた残りをラベルとして左上に表示（例: "チャージ①" → "チャ"）
               const nmLabel=nm.replace(/[\u2460-\u2473\u24EA]/g,"").trim().slice(0,3)||null;
+              const markForCell=cellMark(nm, nmLabel);
               for(const b of badges){
-                const cell={charId:targetChar.id, badge:b, mark:nmLabel};
+                const cell={charId:targetChar.id, badge:b, mark:markForCell};
                 row.cells.push(cell); lastCellOfRow=cell;
               }
               // (suffix はセルの mark に表示済みのためメモには追加しない)
@@ -762,6 +788,12 @@ function parseTLImportText(text){
         }
       }
       if(endMark) memoParts.push("〆");
+      // セルが1つも置かれなかった行（記号のみ等）は、アイコンに表示する場所が無いため
+      // マーカーテキストをメモへフォールバックで残す（"ギブアップ"単独行など）。
+      if(!row.cells.length){
+        if(markerText) memoParts.unshift(markerText);
+        if(markerLabel) memoParts.unshift(markerLabel);
+      }
       row.memo=memoParts.join(" ");
       rows.push(row);
     }
