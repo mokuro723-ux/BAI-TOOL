@@ -518,7 +518,12 @@ function splitMarker(seg){
   }
   return { marker: marker.trim(), rest: rest.trim() };
 }
-function zenkakuToNum(s){ return (s||"").replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)); }
+function zenkakuToNum(s){
+  return (s||"")
+    .replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+    // 丸数字①-⑳・⓪ → 半角数字
+    .replace(/[\u2460-\u2473\u24EA]/g,c=>{ const n=circledToNum(c); return n!=null?String(n):""; });
+}
 // 丸数字(①-⑳・⓪)→半角数字。一致しなければnull
 function circledToNum(ch){
   const code=ch.codePointAt(0);
@@ -608,7 +613,8 @@ function parseTLImportText(text){
       const {marker,rest}=splitMarker(seg);
       const numM=zenkakuToNum(marker).match(/[0-9]+/);
       const num=numM?numM[0]:"";
-      const markerText=marker.replace(/[0-9０-９]+/,"").trim();
+      // markerText: コスト数字（丸数字含む）とMARK_TOKENSを除いた残り（通常は空）
+      const markerText=marker.replace(/[0-9０-９\u2460-\u2473\u24EA]+/g,"").replace(new RegExp(MARK_TOKENS.map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|"),"g"),"").trim();
       // 末尾の "〆"（おしまい印）は専用トークンとして保持する（削除しない）
       let body=rest;
       let endMark=false;
@@ -616,6 +622,22 @@ function parseTLImportText(text){
       const names=body.split(/[,、]/).map(s=>s.trim()).filter(Boolean);
       const row=newRow(); row.num=num;
       const memoParts=[]; if(markerText) memoParts.push(markerText);
+      // rest にキャラ名が含まれず、スキル名のみ（例:「チャージ①」）かつ lastChar がいれば
+      // そのキャラ継続としてセル追加し、スキル名を左上ラベルにする
+      if(!noteLine && names.length===1 && lastChar && !findRosterChar(names[0])){
+        const nm=names[0];
+        const circledInNm=[...nm].filter(ch=>circledToNum(ch)!=null).map(circledToNum);
+        const badges=circledInNm.length?circledInNm:[null];
+        const nmLabel=nm.replace(/[\u2460-\u2473\u24EA]/g,"").trim().slice(0,3)||null;
+        for(const b of badges){
+          const cell={charId:lastChar.id, badge:b, mark:nmLabel};
+          row.cells.push(cell);
+        }
+        if(endMark) memoParts.push("〆");
+        row.memo=memoParts.join(" ");
+        rows.push(row);
+        continue; // 以降の names ループをスキップ
+      }
       if(!names.length && body) memoParts.push(body); // 記号のみ等、キャラ名が無い行はメモへ
       if(noteLine){
         // 注意書き行: キャラ自動配置はせず、内容をそのままメモへ
