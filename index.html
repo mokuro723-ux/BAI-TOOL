@@ -476,6 +476,13 @@ function moveRow(d){ const i=state.rows.findIndex(r=>r.id===state.activeId); con
      （ユーザー運用: TL作成前にロスターへ手動でキャラを入れておく前提）。
    ・1行内の "→" はステップ区切りとして複数行(row)に分割する。
    ・空行は空のrow（段落区切り）として扱う。
+   ・「5 チャージ①」のようにキャラ名が省略された行は、直前に配置したキャラの
+     スキル行とみなし、そのキャラを自動配置する（badgeも丸数字から拾う）。
+   ・「アリスチャージ①,②」のように名前の後ろに丸数字が複数付く場合は、
+     そのキャラのセルを丸数字の数だけ複製し、それぞれにbadge(1,2,...)を割り当てる。
+   ・末尾の「〆」（おしまい印）はメモ欄に保持する（削除しない）。
+   ・「※」等で始まる注意書き行（およびその字下げ続き行）は、プレイヤーへの注釈であり
+     TL本体ではないため、キャラの自動配置はせずメモ欄にそのまま入れる。
 */
 let tesseractLoadPromise=null;
 function loadTesseract(){
@@ -490,6 +497,10 @@ function loadTesseract(){
   return tesseractLoadPromise;
 }
 const MARK_TOKENS=["AUTO即","後掛即","ギブアップ","AUTO","後掛","NS","即","※"];
+// 行頭がこれらの記号の場合、プレイヤーへの注意書き（TL本体ではない）とみなし、
+// キャラ名省略行の自動配置（直前キャラの引き継ぎ）は行わずメモ欄にそのまま入れる。
+const NOTE_PREFIXES=["※","★","・","#","注意","注","メモ","Memo","memo"];
+function isNoteLine(line){ return NOTE_PREFIXES.some(p=>line.startsWith(p)); }
 function splitMarker(seg){
   let rest=seg, marker="";
   let advanced=true;
@@ -504,6 +515,13 @@ function splitMarker(seg){
   return { marker: marker.trim(), rest: rest.trim() };
 }
 function zenkakuToNum(s){ return (s||"").replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)); }
+// 丸数字(①-⑳・⓪)→半角数字。一致しなければnull
+function circledToNum(ch){
+  const code=ch.codePointAt(0);
+  if(code===0x24EA) return 0; // ⓪
+  if(code>=0x2460 && code<=0x2473) return code-0x2460+1; // ①-⑳
+  return null;
+}
 function findRosterChar(name){
   if(!name) return null;
   let c=state.roster.find(x=>x.name===name);
@@ -511,33 +529,83 @@ function findRosterChar(name){
   c=state.roster.find(x=>x.name && name.startsWith(x.name));
   return c||null;
 }
+// セグメント本文(キャラ名候補1つ分)を「ロスター名 + 残り文字列」に分解する。
+// 残り文字列に丸数字が1つ以上含まれていれば、そのキャラを丸数字の個数だけ
+// 複製してそれぞれにbadge(半角数字)を割り当てる（例: "アリスチャージ①②" → アリス×2、badge=1,2）。
+function splitNameAndBadges(body){
+  const c=findRosterChar(body);
+  if(!c) return null;
+  const restRaw=body.slice(c.name.length);
+  const circledChars=[...restRaw].filter(ch=>circledToNum(ch)!=null);
+  const badges = circledChars.length ? circledChars.map(circledToNum) : [null];
+  const suffix = restRaw.replace(/[\u2460-\u2473\u24EA]/g,"").trim();
+  return { char:c, suffix, badges };
+}
 function parseTLImportText(text){
   const lines=(text||"").replace(/\r/g,"").split("\n");
   const rows=[]; const unmatched=[];
+  let lastChar=null; // 直前に配置されたキャラ（名前省略行の引き継ぎ先）
+  let inNoteContinuation=false; // 直前が注釈行で、字下げされた続き行が来ているか
   for(const raw of lines){
     const line=raw.trim();
-    if(!line){ rows.push(newRow()); continue; }
+    if(!line){ rows.push(newRow()); inNoteContinuation=false; continue; }
+    // 行頭が半角/全角スペースで字下げされている行（数字始まりは除く）は、
+    // 直前の注釈行の続きとみなす
+    const indented=/^[ \u3000]/.test(raw) && !/^[ \u3000]*[0-9０-９]/.test(raw);
+    const noteLine=isNoteLine(line) || (indented && inNoteContinuation);
+    inNoteContinuation=noteLine;
     const segs=line.split("→").map(s=>s.trim()).filter(Boolean);
     for(const seg of segs){
       const {marker,rest}=splitMarker(seg);
       const numM=zenkakuToNum(marker).match(/[0-9]+/);
       const num=numM?numM[0]:"";
       const markerText=marker.replace(/[0-9０-９]+/,"").trim();
-      let body=rest.replace(/[〆]$/,"").trim();
+      // 末尾の "〆"（おしまい印）は専用トークンとして保持する（削除しない）
+      let body=rest;
+      let endMark=false;
+      if(/[〆]$/.test(body)){ endMark=true; body=body.replace(/[〆]$/,"").trim(); }
       const names=body.split(/[,、]/).map(s=>s.trim()).filter(Boolean);
       const row=newRow(); row.num=num;
       const memoParts=[]; if(markerText) memoParts.push(markerText);
       if(!names.length && body) memoParts.push(body); // 記号のみ等、キャラ名が無い行はメモへ
-      for(const nm of names){
-        const c=findRosterChar(nm);
-        if(c){
-          row.cells.push({charId:c.id, badge:null, mark:null});
-          const suffix=nm.slice(c.name.length).trim();
-          if(suffix) memoParts.push(suffix);
-        }else{
-          memoParts.push(nm); unmatched.push(nm);
+      if(noteLine){
+        // 注意書き行: キャラ自動配置はせず、内容をそのままメモへ
+        memoParts.push(...names);
+      }else{
+        let lastCellOfRow=null; // この行内で直近に置いたセル（丸数字単独トークンの追加先）
+        for(const nm of names){
+          // カンマ区切りトークンが丸数字のみ（例: "②"）の場合は、直前トークンと同じキャラの
+          // 別バッジとして追加する（"アリスチャージ①,②" → アリス×2, badge=1,2）
+          const onlyCircled = [...nm].length>0 && [...nm].every(ch=>circledToNum(ch)!=null);
+          if(onlyCircled && lastCellOfRow){
+            const nums=[...nm].map(circledToNum);
+            for(const b of nums) row.cells.push({charId:lastCellOfRow.charId, badge:b, mark:null});
+            continue;
+          }
+          const parsed=splitNameAndBadges(nm);
+          if(parsed){
+            for(const b of parsed.badges){
+              const cell={charId:parsed.char.id, badge:b, mark:null};
+              row.cells.push(cell); lastCellOfRow=cell;
+            }
+            lastChar=parsed.char;
+            if(parsed.suffix) memoParts.push(parsed.suffix);
+          }else if(lastChar){
+            // ロスター名と一致しない単独セグメント＝直前キャラのスキル名省略行とみなす。
+            // 末尾に丸数字が付いていれば badge として拾う（例: "チャージ①" → badge=1）
+            const circledInNm=[...nm].filter(ch=>circledToNum(ch)!=null).map(circledToNum);
+            const badges=circledInNm.length?circledInNm:[null];
+            for(const b of badges){
+              const cell={charId:lastChar.id, badge:b, mark:null};
+              row.cells.push(cell); lastCellOfRow=cell;
+            }
+            memoParts.push(nm);
+          }else{
+            memoParts.push(nm); unmatched.push(nm);
+          }
         }
       }
+      if(endMark) memoParts.push("〆");
       row.memo=memoParts.join(" ");
       rows.push(row);
     }
