@@ -546,7 +546,14 @@ function resolveNickname(name){
 // 例: {"チャージ":"アリス"} → 「チャージ①」「チャージ②」は常にアリスに紐付く
 // （あだ名辞書と違い、文中にキーワードが「含まれている」かで判定する）
 const SKILL_KEY = "bai-tool-skill-keywords";
-function loadSkillKeywords(){ try{ return JSON.parse(localStorage.getItem(SKILL_KEY)||"{}"); }catch(e){ return {}; } }
+// 初回（未設定時）の既定値。現状チャージ持ちはアリスのみのため決め打ちで投入し、
+// ユーザーが📖画面で変更・追加・削除できるようにする（ユーザー要望: 毎回手動設定せず最初から動く状態にしたい）。
+const SKILL_KEY_DEFAULTS = { "チャージ":"アリス" };
+function loadSkillKeywords(){
+  const raw=localStorage.getItem(SKILL_KEY);
+  if(raw===null){ saveSkillKeywords(SKILL_KEY_DEFAULTS); return {...SKILL_KEY_DEFAULTS}; }
+  try{ return JSON.parse(raw)||{}; }catch(e){ return {...SKILL_KEY_DEFAULTS}; }
+}
 function saveSkillKeywords(d){ localStorage.setItem(SKILL_KEY, JSON.stringify(d)); }
 // nm（例: "チャージ①"）にスキルキーワードが含まれていれば、対応するロスターキャラを返す
 function resolveSkillKeyword(nm){
@@ -678,13 +685,17 @@ function parseTLImportText(text){
       const row=newRow(); row.num=num;
       const memoParts=[]; if(markerText) memoParts.push(markerText); if(markerLabel) memoParts.push(markerLabel);
       if(extraFreeText) memoParts.push(extraFreeText);
-      // rest にキャラ名が含まれず、スキル名のみ（例:「チャージ①」）の場合、
+      // rest にキャラ名が含まれず、丸数字付きスキル名（例:「チャージ①」）または
+      // スキルキーワード辞書に一致する場合のみ「スキル名省略行」とみなし、
       // 1) スキルキーワード辞書に一致すればそのキャラ 2) なければ lastChar
-      // を紐付け先とし、前の行（rows末尾）にセルを追加する（別行にしない）
+      // を紐付け先とし、前の行（rows末尾）にセルを追加する（別行にしない）。
+      // ※ここで丸数字/キーワードどちらにも一致しない自由文（「通常攻撃1発後」等の
+      //   注釈）まで lastChar に吸収してしまうと行が崩れるため、対象を限定する。
       if(!noteLine && names.length===1 && !findRosterChar(names[0])){
         const nm=names[0];
         const kwChar=resolveSkillKeyword(nm);
-        const targetChar=kwChar||lastChar;
+        const hasCircled=[...nm].some(ch=>circledToNum(ch)!=null);
+        const targetChar=kwChar||(hasCircled?lastChar:null);
         if(targetChar){
           const circledInNm=[...nm].filter(ch=>circledToNum(ch)!=null).map(circledToNum);
           const badges=circledInNm.length?circledInNm:[null];
@@ -694,6 +705,9 @@ function parseTLImportText(text){
             for(const b of badges) targetRow.cells.push({charId:targetChar.id, badge:b, mark:nmLabel});
             // コストがあれば上書き（例: ⑤ チャージ① → コスト5をその行に）
             if(num) targetRow.num=num;
+            // この行のmarker/自由文（例:"NS","発射確認"）は捨てずに直前行のメモへ追記する
+            const extraMemo=[markerText, markerLabel, extraFreeText].filter(Boolean);
+            if(extraMemo.length) targetRow.memo=[targetRow.memo, ...extraMemo].filter(Boolean).join(" ");
           }
           continue; // 新規行は作らない
         }
@@ -722,10 +736,14 @@ function parseTLImportText(text){
             }
             lastChar=parsed.char;
           }else{
-            // ロスター名と一致しない単独セグメント＝スキル名省略行とみなす。
-            // 1) スキルキーワード辞書に一致すればそのキャラ 2) なければ直前キャラ(lastChar)
+            // ロスター名と一致しない単独セグメント。
+            // 丸数字付き（例:"チャージ①"）またはスキルキーワード辞書一致の場合のみ
+            // スキル名省略行とみなす。1) キーワード一致→そのキャラ 2) なければ
+            // 丸数字があるときだけ直前キャラ(lastChar)にフォールバック。
+            // （丸数字もキーワードも無い自由文は、直前キャラに吸収せずメモへ）
             const kwChar=resolveSkillKeyword(nm);
-            const targetChar=kwChar||lastChar;
+            const hasCircled=[...nm].some(ch=>circledToNum(ch)!=null);
+            const targetChar=kwChar||(hasCircled?lastChar:null);
             if(targetChar){
               // 末尾に丸数字が付いていれば badge として拾う（例: "チャージ①" → badge=1）
               const circledInNm=[...nm].filter(ch=>circledToNum(ch)!=null).map(circledToNum);
