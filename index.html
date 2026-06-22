@@ -678,21 +678,15 @@ function parseTLImportText(text){
   // 行頭要素: ①丸数字(①②等)、②半角数字[0-9]、③MARK_TOKENS、④ロスター名、⑤スキルキーワード
   function normalizeSpaces(src){
     const tokens=[...MARK_TOKENS].sort((a,b)=>b.length-a.length);
-    // MARK_TOKENSの直前のスペースを改行に
     let s=src.replace(/\r/g,"");
-    s=s.replace(/ +(?=[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳⓪0-9])/g,"\n");
-    s=s.replace(new RegExp(" +(?="+tokens.map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")+")","g"),"\n");
-    // ロスター名の直前のスペースを改行に（ただし以下は除外）
-    // ①マーカー単語の直後スペース（後掛即 ナギサ等、マーカー+キャラ名のセットを保持）
-    // ②丸数字・半角数字の直後スペース（⑧ キサキ等、コスト+キャラ名のセットを保持）
-    const rNames=[...state.roster].map(c=>c.name).filter(Boolean).sort((a,b)=>b.length-a.length);
-    const tokenPattern=tokens.map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|");
-    for(const nm of rNames){
-      const esc=nm.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
-      // マーカー単語または数字（丸数字・半角）の直後スペースは改行しない
-      s=s.replace(new RegExp("(?<!(?:"+tokenPattern+"|[0-9①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳⓪])) +(?="+esc+")","g"),"\n");
-    }
-    // スキルキーワードの直前のスペースを改行に
+    // 丸数字・半角数字の直前のスペースを改行に（コスト行の開始）
+    // lookbehindは半角数字のみ除外（丸数字直後のスペースは改行する＝チャージ②の後に⑧コストが来るケースに対応）
+    s=s.replace(/(?<![0-9]) +(?=[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳⓪0-9])/g,"\n");
+    // MARK_TOKENSの直前のスペースを改行に
+    // ただし半角数字の直後（⑧ キサキ即クルミ等のコスト+行のセット）は除外
+    // ※丸数字直後は除外しない（チャージ② AUTO即アリス の AUTO即 を分割するため）
+    s=s.replace(new RegExp("(?<![0-9]) +(?="+tokens.map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")+")","g"),"\n");
+    // スキルキーワードの直前のスペースを改行に（チャージ等）
     const skKeys=Object.keys(loadSkillKeywords()).sort((a,b)=>b.length-a.length);
     for(const k of skKeys){
       if(!k) continue;
@@ -752,36 +746,6 @@ function parseTLImportText(text){
       // セルが1つも置かれない行（記号のみ・キャラ名なし）の場合だけメモに残す（下記で判定して追記）。
       const memoParts=[];
       if(extraFreeText) memoParts.push(extraFreeText);
-      // 行中にマーカーを挟んで複数キャラ名が出てくる場合（例:"キサキ即クルミ"）、
-      // 「通常攻撃1発後」のような共有の自由文コンテキストも「後掛」によるまとめも無ければ、
-      // それぞれ別々の拍（行）とみなして行を分割する（圧縮しすぎを防ぐ）。
-      // 例外: 自由文（extraFreeText）や後掛（backNames）が絡む場合は、同じ拍とみなして
-      // 1行にまとめる（従来通り）。
-      if(midTokenHit && !noteLine && !extraFreeText && backNames.size===0 && names.length>1){
-        let first=true;
-        for(const nm of names){
-          const nr=newRow(); if(first){ nr.num=num; first=false; }
-          const parsed=splitNameAndBadges(nm);
-          if(parsed){
-            const markForCell=cellMark(nm, parsed.mark);
-            for(const b of parsed.badges) nr.cells.push({charId:parsed.char.id, badge:b, mark:markForCell});
-            lastChar=parsed.char;
-          }else{
-            const kwChar=resolveSkillKeyword(nm);
-            const hasCircled=[...nm].some(ch=>circledToNum(ch)!=null);
-            const targetChar=kwChar||(hasCircled?lastChar:null);
-            if(targetChar){
-              const circledInNm=[...nm].filter(ch=>circledToNum(ch)!=null).map(circledToNum);
-              const badges=circledInNm.length?circledInNm:[null];
-              const nmLabel=nm.replace(/[\u2460-\u2473\u24EA]/g,"").trim().slice(0,3)||null;
-              const markForCell=cellMark(nm, nmLabel);
-              for(const b of badges) nr.cells.push({charId:targetChar.id, badge:b, mark:markForCell});
-            }
-          }
-          rows.push(nr);
-        }
-        continue;
-      }
       // rest にキャラ名が含まれず、丸数字付きスキル名（例:「チャージ①」）または
       // スキルキーワード辞書に一致する場合のみ「スキル名省略行」とみなし、
       // 1) スキルキーワード辞書に一致すればそのキャラ 2) なければ lastChar
