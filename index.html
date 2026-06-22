@@ -672,7 +672,36 @@ function splitBodyIntoSegments(body){
   return { segNames, freeText:freeParts.join(" "), backNames, abbrByName };
 }
 function parseTLImportText(text){
-  const lines=(text||"").replace(/\r/g,"").split("\n");
+  // スペース区切り入力の正規化:
+  // 「AUTO即カヨコ チャージ①チャージ②」のようにスペースで区切られた入力でも、
+  // 改行で区切られた入力と同様に処理できるよう、行頭要素の直前のスペースを改行に変換する。
+  // 行頭要素: ①丸数字(①②等)、②半角数字[0-9]、③MARK_TOKENS、④ロスター名、⑤スキルキーワード
+  function normalizeSpaces(src){
+    const tokens=[...MARK_TOKENS].sort((a,b)=>b.length-a.length);
+    // MARK_TOKENSの直前のスペースを改行に
+    let s=src.replace(/\r/g,"");
+    s=s.replace(/ +(?=[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳⓪0-9])/g,"\n");
+    s=s.replace(new RegExp(" +(?="+tokens.map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")+")","g"),"\n");
+    // ロスター名の直前のスペースを改行に（ただし以下は除外）
+    // ①マーカー単語の直後スペース（後掛即 ナギサ等、マーカー+キャラ名のセットを保持）
+    // ②丸数字・半角数字の直後スペース（⑧ キサキ等、コスト+キャラ名のセットを保持）
+    const rNames=[...state.roster].map(c=>c.name).filter(Boolean).sort((a,b)=>b.length-a.length);
+    const tokenPattern=tokens.map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|");
+    for(const nm of rNames){
+      const esc=nm.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+      // マーカー単語または数字（丸数字・半角）の直後スペースは改行しない
+      s=s.replace(new RegExp("(?<!(?:"+tokenPattern+"|[0-9①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳⓪])) +(?="+esc+")","g"),"\n");
+    }
+    // スキルキーワードの直前のスペースを改行に
+    const skKeys=Object.keys(loadSkillKeywords()).sort((a,b)=>b.length-a.length);
+    for(const k of skKeys){
+      if(!k) continue;
+      const esc=k.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+      s=s.replace(new RegExp(" +(?="+esc+")","g"),"\n");
+    }
+    return s;
+  }
+  const lines=normalizeSpaces(text||"").split("\n");
   const rows=[]; const unmatched=[];
   let lastChar=null; // 直前に配置されたキャラ（名前省略行の引き継ぎ先）
   let inNoteContinuation=false; // 直前が注釈行で、字下げされた続き行が来ているか
@@ -1239,6 +1268,9 @@ function exportPNG(){
         drawAvatar(ctx, rosterById(cell.charId), x, yy, IC/2, imgs, cell.ring);
         if(cell.badge){ ctx.fillStyle="#000c"; ctx.beginPath(); ctx.arc(x+IC/2-3,yy+IC/2-3,8,0,7); ctx.fill();
           ctx.fillStyle="#fff"; ctx.font="bold 11px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(String(cell.badge),x+IC/2-3,yy+IC/2-3); }
+        if(cell.mark){ const mk=String(cell.mark), mkW=Math.max(15,mk.length*7+4);
+          ctx.fillStyle="#1d4ed8"; rrect(ctx,x-IC/2-3,yy-IC/2-3,mkW,15,4); ctx.fill();
+          ctx.fillStyle="#fff"; ctx.font="bold 10px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(mk,x-IC/2-3+mkW/2,yy-IC/2-3+7.5); }
       });
       // memo
       if(r.memo){ ctx.fillStyle="#cfd5f5"; ctx.font="13px sans-serif"; ctx.textAlign="left";
