@@ -47,18 +47,17 @@
   .thead, .trow{display:flex; align-items:stretch; border-bottom:1px solid var(--line);}
   .thead{background:var(--panel2); color:var(--sub); font-size:11px; font-weight:700;}
   .thead>div{padding:5px 4px; display:flex; align-items:center;}
-  .c-num{flex:0 0 38px; border-right:1px solid var(--line);}
+  /* c-num廃止 */
   .c-time{flex:0 0 50px; border-right:1px solid var(--line);}
   .c-cells{flex:1 1 auto; min-width:0; border-right:1px solid var(--line);}
-  .c-memo{flex:0 0 128px;}
+  .c-memo{flex:0 0 170px;}
 
   .trow{background:var(--panel); min-height:40px;}
   .trow.active{background:var(--active);}
   .trow input{width:100%; height:100%; min-height:40px; background:transparent; border:none;
     color:var(--txt); font-size:14px; padding:4px; text-align:center;}
   .trow input.c-memo{text-align:left; font-size:12px; color:var(--sub);}
-  .trow .c-num input, .trow .c-time input{font-weight:700; font-variant-numeric:tabular-nums;}
-  .trow .c-time input{color:var(--accent);}
+  .trow .c-time input{font-weight:700; font-variant-numeric:tabular-nums; color:var(--accent);}
   .cellwrap{flex:1 1 auto; min-width:0; display:flex; flex-wrap:wrap; align-content:center;
     gap:3px; padding:4px;}
   .cellwrap:empty::before{content:"＋"; color:#3a4373; font-size:14px;}
@@ -66,6 +65,9 @@
   /* placed cell */
   .cell{position:relative; width:28px; height:28px; flex:0 0 auto; touch-action:none;}
   .cell .av{width:28px; height:28px; font-size:11px;}
+  .ccost{position:absolute; left:-3px; bottom:-3px; min-width:15px; height:15px; padding:0 2px;
+    border-radius:8px; background:#c85000; color:#fff; font-size:10px; font-weight:700;
+    line-height:15px; text-align:center;}
   .cbadge{position:absolute; right:-3px; bottom:-3px; min-width:15px; height:15px; padding:0 2px;
     border-radius:8px; background:#000a; color:#fff; font-size:10px; font-weight:700;
     line-height:15px; text-align:center;}
@@ -163,7 +165,6 @@
 <div id="pinpSpacer"></div>
 
 <div class="thead">
-  <div class="c-num">コスト</div>
   <div class="c-time">タイム</div>
   <div class="c-cells">キャラ配置</div>
   <div class="c-memo">メモ</div>
@@ -200,15 +201,16 @@
  データモデル（localStorage: "bai-tool-store-v1"）
    store = { docs:[doc], currentId, imgLib:{ 名前: dataURL } }   // imgLib は全TL共通
    doc   = { id, title, roster:[char], rows:[row], activeId, updatedAt }
-   char  = { id, name, text, color, img(dataURL|null), num }      // roster=今回使うキャラ
-   row   = { id, num, time, cells:[cell], memo }                  // 表の1行
-   cell  = { charId, badge:(number|null), ring:(色|null), mark:(\"←\"|null) }  // 配置した1キャラ
+   char  = { id, name, text, color, img(dataURL|null), num }      // roster=今回使うキャラ(最大20)
+   row   = { id, num, time, cells:[cell], memo }                  // 表の1行。numはコスト値
+   cell  = { charId, badge:(number|null), ring:(色|null), mark:(文字列|null) }  // 配置した1キャラ
    ・state = 現在表示中の doc（store.docs 内の参照）。save() は store 全体を保存。
    ・旧 "bai-tool-v1"（単一doc）は loadStore() が自動移行。
 
  画面（縦リスト=表）
    ヘッダ: [☰TL一覧] タイトル [キャラ]   /   上段に使用キャラのミニ表示
-   表: 各行 = コスト | タイム | キャラ配置(cells) | メモ
+   表: 各行 = タイム | キャラ配置(cells) | メモ（コスト専用列は廃止。コストは
+        先頭セルの左下バッジで表示。cellのバッジ位置: 左下=コスト(橙) / 右下=badge(黒) / 左上=mark(青)）
    下部バー(親指ゾーン): ＋行 / ▲▼ / 行複製 / 行削除 / セル削除 / 使用キャラ(タップで配置)
 
  操作（速記の核）
@@ -216,7 +218,8 @@
    ・置いたセルのジェスチャ（attachFlick→gesture）:
        タップ=枠色cycle(ring) / 上=badge+1 / 下=-1 / 右=+3 / 左=←印トグル(mark)
    ・削除は下部バーの「セル削除」ボタン（選択中の行の最後に置いたキャラを1つ削除）
-   ・コスト欄は整数のみ丸数字表示(7→⑦, circledCost)。小数/「即」等はそのまま
+   ・コストは行の先頭セル左下に橙色バッジで表示。整数は丸数字(7→⑦, circledCost)、
+     小数/「即」等はそのまま。手動編集UIは無く、TL取込のパースでのみ設定される。
 
  自動更新: CHAR_NAMES(名前) と CHAR_ICONS(名前→SchaleDB Id) を
    scripts/update-chars.mjs が月1で SchaleDB から更新（START/END マーカー間を置換）。
@@ -232,11 +235,11 @@ const PALETTE = ["#5b8cff","#ff5b6e","#3ddc97","#ffb648","#b06bff","#ff7ac8","#4
    下の CHAR_NAMES 行は scripts/update-chars.mjs により月1で自動更新される。手で編集する場合は
    START/END マーカーを壊さないこと） */
 /* CHAR_NAMES:START */
-const CHAR_NAMES = ["アイリ","アオバ","アカネ","アカリ","アコ","アズサ","アスナ","アツコ","アヤネ","アリス","アル","イオリ","イズナ","イズミ","イチカ","イブキ","イロハ","ウイ","ウタハ","ウミカ","エイミ","エリ","エリカ","オトギ","カエデ","カズサ","カスミ","カノエ","カホ","カヨコ","カリン","カンナ","キキョウ","キサキ","キララ","キリノ","クルミ","ケイ","ココナ","コタマ","コトリ","コノカ","コハル","コユキ","サオリ","サキ","サクラコ","サツキ","サヤ","シグレ","シズコ","シミコ","ジュリ","シュン","ジュンコ","シロコ","シロコ＊テラー","スズミ","スバル","スミレ","セイア","セナ","セリカ","セリナ","タカネ","チアキ","チェリノ","チセ","チナツ","チヒロ","ツクヨ","ツバキ","ツルギ","トキ","トモエ","ナギサ","ナグサ","ナツ","ニコ","ニヤ","ネル","ノア","ノゾミ","ノドカ","ノノミ","ハスミ","ハナエ","ハナコ","ハルカ","ハルナ","ハレ","ヒカリ","ヒナ","ヒナタ","ヒビキ","ヒフミ","ヒマリ","ヒヨリ","フィーナ","フウカ","フブキ","フユ","ホシノ","マキ","マコト","マシロ","マリー","マリナ","ミカ","ミサキ","ミチル","ミドリ","ミナ","ミネ","ミノリ","ミモリ","ミヤコ","ミユ","ミヨ","ムツキ","メグ","メル","モエ","モミジ","モモイ","ヤクモ","ユウカ","ユカリ","ユズ","ヨシミ","ラブ","リオ","リツ","ルミ","レイ","レイサ","レイジョ","レナ","レンゲ","ワカモ","御坂美琴","佐天涙子","初音ミク","食蜂操祈","アイリ（バンド）","アカネ（バニーガール）","アカネ（制服）","アカリ（正月）","アコ（ドレス）","アズサ（水着）","アスナ（バニーガール）","アスナ（制服）","アツコ（水着）","アヤネ（水着）","アリス（メイド）","アリス（臨戦）","アル（ドレス）","アル（正月）","イオリ（水着）","イズナ（水着）","イズミ（水着）","イズミ（正月）","イチカ（水着）","ウイ（水着）","ウタハ（応援団）","エイミ（水着）","エイミ（臨戦）","カズサ（バンド）","カヨコ（ドレス）","カヨコ（正月）","カリン（バニーガール）","カリン（制服）","カンナ（水着）","キキョウ（水着）","キサキ（水着）","キリノ（水着）","コタマ（キャンプ）","コトリ（応援団）","コハル（水着）","コユキ（パジャマ）","サオリ（ドレス）","サオリ（水着）","サキ（水着）","サクラコ（アイドル）","サヤ（私服）","シグレ（温泉）","シズコ（水着）","ジュリ（アルバイト）","シュン（水着）","シュン（幼女）","ジュンコ（正月）","シロコ（ライディング）","シロコ（水着）","スズミ（マジカル）","スミレ（アルバイト）","セイア（水着）","セナ（私服）","セリカ（水着）","セリカ（正月）","セリナ（クリスマス）","チェリノ（温泉）","チセ（水着）","チナツ（温泉）","ツクヨ（ドレス）","ツバキ（ガイド）","ツルギ（水着）","トキ（バニーガール）","トキ（臨戦）","トモエ（チーパオ）","ナギサ（水着）","ナグサ（水着）","ナツ（バンド）","ネル（バニーガール）","ネル（制服）","ノア（パジャマ）","ノドカ（温泉）","ノノミ（水着）","ハスミ（水着）","ハスミ（体操服）","ハナエ（クリスマス）","ハナコ（水着）","ハルカ（ドレス）","ハルカ（正月）","ハルナ（正月）","ハルナ（体操服）","ハレ（キャンプ）","ヒナ（ドレス）","ヒナ（水着）","ヒナタ（水着）","ヒビキ（応援団）","ヒフミ（水着）","ヒマリ（臨戦）","ヒヨリ（水着）","フィーナ（ガイド）","フウカ（正月）","フブキ（水着）","ホシノ（水着）","ホシノ（臨戦）","マキ（キャンプ）","マシロ（水着）","マリー（アイドル）","マリー（体操服）","マリナ（チーパオ）","ミカ（水着）","ミサキ（水着）","ミチル（ドレス）","ミドリ（メイド）","ミネ（アイドル）","ミモリ（水着）","ミヤコ（水着）","ミユ（水着）","ムツキ（ドレス）","ムツキ（正月）","モエ（水着）","モモイ（メイド）","ユウカ（パジャマ）","ユウカ（体操服）","ユカリ（水着）","ユズ（メイド）","ユズ（臨戦）","ヨシミ（バンド）","リオ（臨戦）","レイサ（マジカル）","レンゲ（水着）","ワカモ（水着）"];
+const CHAR_NAMES = ["アイリ","アオバ","アカネ","アカリ","アコ","アズサ","アスナ","アツコ","アヤネ","アリス","アル","イオリ","イズナ","イズミ","イチカ","イブキ","イロハ","ウイ","ウタハ","ウミカ","エイミ","エリ","エリカ","オトギ","カエデ","カズサ","カスミ","カノエ","カホ","カヨコ","カリン","カンナ","キキョウ","キサキ","キララ","キリノ","クルミ","ケイ","ココナ","コタマ","コトリ","コノカ","コハル","コユキ","サオリ","サキ","サクラコ","サツキ","サヤ","シグレ","シズコ","シミコ","ジュリ","シュン","ジュンコ","シロコ","シロコ＊テラー","スズミ","スバル","スミレ","セイア","セナ","セリカ","セリナ","タカネ","チアキ","チェリノ","チセ","チナツ","チヒロ","ツクヨ","ツバキ","ツルギ","トキ","トモエ","ナギサ","ナグサ","ナツ","ニコ","ニヤ","ネル","ノア","ノゾミ","ノドカ","ノノミ","ハスミ","ハナエ","ハナコ","ハルカ","ハルナ","ハレ","ヒカリ","ヒナ","ヒナタ","ヒビキ","ヒフミ","ヒマリ","ヒヨリ","フィーナ","フウカ","フブキ","フユ","ホシノ","マキ","マコト","マシロ","マリー","マリナ","ミカ","ミサキ","ミチル","ミドリ","ミナ","ミネ","ミノリ","ミモリ","ミヤコ","ミユ","ミヨ","ムツキ","メグ","メル","モエ","モミジ","モモイ","ヤクモ","ユウカ","ユカリ","ユズ","ヨシミ","ラブ","リオ","リツ","ルミ","レイ","レイサ","レイジョ","レナ","レンゲ","ワカモ","御坂美琴","佐天涙子","初音ミク","食蜂操祈","アイリ（バンド）","アカネ（バニーガール）","アカネ（制服）","アカリ（正月）","アコ（ドレス）","アズサ（水着）","アスナ（バニーガール）","アスナ（制服）","アツコ（水着）","アヤネ（水着）","アリス（メイド）","アリス（臨戦）","アル（ドレス）","アル（正月）","イオリ（水着）","イズナ（水着）","イズミ（水着）","イズミ（正月）","イチカ（水着）","ウイ（水着）","ウタハ（応援団）","エイミ（水着）","エイミ（臨戦）","カズサ（バンド）","カヨコ（ドレス）","カヨコ（正月）","カリン（バニーガール）","カリン（制服）","カンナ（水着）","キキョウ（水着）","キリノ（水着）","コタマ（キャンプ）","コトリ（応援団）","コハル（水着）","コユキ（パジャマ）","サオリ（ドレス）","サオリ（水着）","サキ（水着）","サクラコ（アイドル）","サヤ（私服）","シグレ（温泉）","シズコ（水着）","ジュリ（アルバイト）","シュン（幼女）","ジュンコ（正月）","シロコ（ライディング）","シロコ（水着）","スズミ（マジカル）","スミレ（アルバイト）","セイア（水着）","セナ（私服）","セリカ（水着）","セリカ（正月）","セリナ（クリスマス）","チェリノ（温泉）","チセ（水着）","チナツ（温泉）","ツクヨ（ドレス）","ツバキ（ガイド）","ツルギ（水着）","トキ（バニーガール）","トキ（臨戦）","トモエ（チーパオ）","ナギサ（水着）","ナグサ（水着）","ナツ（バンド）","ネル（バニーガール）","ネル（制服）","ノア（パジャマ）","ノドカ（温泉）","ノノミ（水着）","ハスミ（水着）","ハスミ（体操服）","ハナエ（クリスマス）","ハナコ（水着）","ハルカ（ドレス）","ハルカ（正月）","ハルナ（正月）","ハルナ（体操服）","ハレ（キャンプ）","ヒナ（ドレス）","ヒナ（水着）","ヒナタ（水着）","ヒビキ（応援団）","ヒフミ（水着）","ヒマリ（臨戦）","ヒヨリ（水着）","フィーナ（ガイド）","フウカ（正月）","フブキ（水着）","ホシノ（水着）","ホシノ（臨戦）","マキ（キャンプ）","マシロ（水着）","マリー（アイドル）","マリー（体操服）","マリナ（チーパオ）","ミカ（水着）","ミサキ（水着）","ミチル（ドレス）","ミドリ（メイド）","ミネ（アイドル）","ミモリ（水着）","ミヤコ（水着）","ミユ（水着）","ムツキ（ドレス）","ムツキ（正月）","モエ（水着）","モモイ（メイド）","ユウカ（パジャマ）","ユウカ（体操服）","ユカリ（水着）","ユズ（メイド）","ユズ（臨戦）","ヨシミ（バンド）","リオ（臨戦）","レイサ（マジカル）","レンゲ（水着）","ワカモ（水着）"];
 /* CHAR_NAMES:END */
 /* 名前→SchaleDB Id（公式アイコン取得用）。scripts/update-chars.mjs が自動更新。マーカーを壊さないこと */
 /* CHAR_ICONS:START */
-const CHAR_ICONS = {"アイリ":23000,"アオバ":16017,"アカネ":13000,"アカリ":13002,"アコ":20008,"アズサ":10019,"アスナ":16001,"アツコ":10042,"アヤネ":23005,"アリス":10015,"アル":10000,"イオリ":10006,"イズナ":10014,"イズミ":10009,"イチカ":10077,"イブキ":16014,"イロハ":20016,"ウイ":10035,"ウタハ":23004,"ウミカ":10090,"エイミ":10001,"エリ":10125,"エリカ":20058,"オトギ":16020,"カエデ":20015,"カズサ":10049,"カスミ":10078,"カノエ":10126,"カホ":10065,"カヨコ":13005,"カリン":20001,"カンナ":20023,"キキョウ":10083,"キサキ":20039,"キララ":10093,"キリノ":13012,"クルミ":10140,"ケイ":10135,"ココナ":10050,"コタマ":26001,"コトリ":16002,"コノカ":10137,"コハル":10020,"コユキ":10063,"サオリ":10048,"サキ":20014,"サクラコ":10061,"サツキ":20040,"サヤ":20002,"シグレ":10055,"シズコ":23006,"シミコ":26004,"ジュリ":26002,"シュン":10011,"ジュンコ":13007,"シロコ":10010,"シロコ＊テラー":10100,"スズミ":16003,"スバル":10130,"スミレ":10012,"セイア":10110,"セナ":20012,"セリカ":13008,"セリナ":26003,"タカネ":10131,"チアキ":10107,"チェリノ":10017,"チセ":13001,"チナツ":26000,"チヒロ":20013,"ツクヨ":10040,"ツバキ":13009,"ツルギ":10013,"トキ":10062,"トモエ":16007,"ナギサ":20024,"ナグサ":10119,"ナツ":10029,"ニコ":10139,"ニヤ":20046,"ネル":10008,"ノア":10052,"ノゾミ":10118,"ノドカ":26006,"ノノミ":13004,"ハスミ":13003,"ハナエ":23002,"ハナコ":23007,"ハルカ":16000,"ハルナ":10002,"ハレ":23003,"ヒカリ":10117,"ヒナ":10004,"ヒナタ":10036,"ヒビキ":20000,"ヒフミ":10003,"ヒマリ":20020,"ヒヨリ":20017,"フィーナ":16004,"フウカ":23001,"フブキ":16008,"フユ":10128,"ホシノ":10005,"マキ":10007,"マコト":20033,"マシロ":20003,"マリー":23008,"マリナ":10037,"ミカ":10059,"ミサキ":10041,"ミチル":16009,"ミドリ":10016,"ミナ":10070,"ミネ":10058,"ミノリ":20026,"ミモリ":10034,"ミヤコ":10038,"ミユ":10039,"ミヨ":10127,"ムツキ":13006,"メグ":10060,"メル":10075,"モエ":20018,"モミジ":13013,"モモイ":13011,"ヤクモ":20052,"ユウカ":13010,"ユカリ":10081,"ユズ":10018,"ヨシミ":26005,"ラブ":16018,"リオ":20041,"リツ":20050,"ルミ":10069,"レイ":10115,"レイサ":10068,"レイジョ":10104,"レナ":10138,"レンゲ":10082,"ワカモ":10033,"御坂美琴":10079,"佐天涙子":26011,"初音ミク":20007,"食蜂操祈":10080,"アイリ（バンド）":16015,"アカネ（バニーガール）":20019,"アカネ（制服）":20057,"アカリ（正月）":20034,"アコ（ドレス）":10087,"アズサ（水着）":10021,"アスナ（バニーガール）":10028,"アスナ（制服）":10112,"アツコ（水着）":26013,"アヤネ（水着）":26007,"アリス（メイド）":10066,"アリス（臨戦）":10134,"アル（ドレス）":10089,"アル（正月）":10031,"イオリ（水着）":10023,"イズナ（水着）":10046,"イズミ（水着）":16006,"イズミ（正月）":20043,"イチカ（水着）":26015,"ウイ（水着）":10073,"ウタハ（応援団）":10051,"エイミ（水着）":20032,"エイミ（臨戦）":10136,"カズサ（バンド）":10091,"カヨコ（ドレス）":10088,"カヨコ（正月）":10064,"カリン（バニーガール）":10027,"カリン（制服）":26014,"カンナ（水着）":10096,"キキョウ（水着）":20047,"キサキ（水着）":10145,"キリノ（水着）":26012,"コタマ（キャンプ）":10084,"コトリ（応援団）":10076,"コハル（水着）":16013,"コユキ（パジャマ）":20056,"サオリ（ドレス）":10116,"サオリ（水着）":10101,"サキ（水着）":10072,"サクラコ（アイドル）":10106,"サヤ（私服）":20006,"シグレ（温泉）":20031,"シズコ（水着）":26008,"ジュリ（アルバイト）":10114,"シュン（水着）":10144,"シュン（幼女）":10025,"ジュンコ（正月）":16012,"シロコ（ライディング）":10024,"シロコ（水着）":20027,"スズミ（マジカル）":10129,"スミレ（アルバイト）":20044,"セイア（水着）":10123,"セナ（私服）":10113,"セリカ（水着）":20036,"セリカ（正月）":20011,"セリナ（クリスマス）":10056,"チェリノ（温泉）":20009,"チセ（水着）":10047,"チナツ（温泉）":10030,"ツクヨ（ドレス）":10132,"ツバキ（ガイド）":20035,"ツルギ（水着）":16005,"トキ（バニーガール）":10067,"トキ（臨戦）":16019,"トモエ（チーパオ）":20038,"ナギサ（水着）":20048,"ナグサ（水着）":10142,"ナツ（バンド）":10120,"ネル（バニーガール）":10026,"ネル（制服）":10111,"ノア（パジャマ）":10109,"ノドカ（温泉）":20010,"ノノミ（水着）":10044,"ハスミ（水着）":10124,"ハスミ（体操服）":16011,"ハナエ（クリスマス）":20021,"ハナコ（水着）":10074,"ハルカ（ドレス）":10141,"ハルカ（正月）":20025,"ハルナ（正月）":10057,"ハルナ（体操服）":20030,"ハレ（キャンプ）":10085,"ヒナ（ドレス）":10086,"ヒナ（水着）":10022,"ヒナタ（水着）":20028,"ヒビキ（応援団）":16010,"ヒフミ（水着）":20005,"ヒマリ（臨戦）":20054,"ヒヨリ（水着）":10102,"フィーナ（ガイド）":20045,"フウカ（正月）":20022,"フブキ（水着）":20037,"ホシノ（水着）":10045,"ホシノ（臨戦）":10099,"マキ（キャンプ）":20042,"マシロ（水着）":20004,"マリー（アイドル）":10105,"マリー（体操服）":10054,"マリナ（チーパオ）":10103,"ミカ（水着）":10122,"ミサキ（水着）":20049,"ミチル（ドレス）":20053,"ミドリ（メイド）":10095,"ミネ（アイドル）":16016,"ミモリ（水着）":20029,"ミヤコ（水着）":10071,"ミユ（水着）":26010,"ムツキ（ドレス）":20059,"ムツキ（正月）":10032,"モエ（水着）":10097,"モモイ（メイド）":10094,"ユウカ（パジャマ）":10108,"ユウカ（体操服）":10053,"ユカリ（水着）":10121,"ユズ（メイド）":26009,"ユズ（臨戦）":20055,"ヨシミ（バンド）":10092,"リオ（臨戦）":10133,"レイサ（マジカル）":20051,"レンゲ（水着）":13014,"ワカモ（水着）":10043};
+const CHAR_ICONS = {"アイリ":23000,"アオバ":16017,"アカネ":13000,"アカリ":13002,"アコ":20008,"アズサ":10019,"アスナ":16001,"アツコ":10042,"アヤネ":23005,"アリス":10015,"アル":10000,"イオリ":10006,"イズナ":10014,"イズミ":10009,"イチカ":10077,"イブキ":16014,"イロハ":20016,"ウイ":10035,"ウタハ":23004,"ウミカ":10090,"エイミ":10001,"エリ":10125,"エリカ":20058,"オトギ":16020,"カエデ":20015,"カズサ":10049,"カスミ":10078,"カノエ":10126,"カホ":10065,"カヨコ":13005,"カリン":20001,"カンナ":20023,"キキョウ":10083,"キサキ":20039,"キララ":10093,"キリノ":13012,"クルミ":10140,"ケイ":10135,"ココナ":10050,"コタマ":26001,"コトリ":16002,"コノカ":10137,"コハル":10020,"コユキ":10063,"サオリ":10048,"サキ":20014,"サクラコ":10061,"サツキ":20040,"サヤ":20002,"シグレ":10055,"シズコ":23006,"シミコ":26004,"ジュリ":26002,"シュン":10011,"ジュンコ":13007,"シロコ":10010,"シロコ＊テラー":10100,"スズミ":16003,"スバル":10130,"スミレ":10012,"セイア":10110,"セナ":20012,"セリカ":13008,"セリナ":26003,"タカネ":10131,"チアキ":10107,"チェリノ":10017,"チセ":13001,"チナツ":26000,"チヒロ":20013,"ツクヨ":10040,"ツバキ":13009,"ツルギ":10013,"トキ":10062,"トモエ":16007,"ナギサ":20024,"ナグサ":10119,"ナツ":10029,"ニコ":10139,"ニヤ":20046,"ネル":10008,"ノア":10052,"ノゾミ":10118,"ノドカ":26006,"ノノミ":13004,"ハスミ":13003,"ハナエ":23002,"ハナコ":23007,"ハルカ":16000,"ハルナ":10002,"ハレ":23003,"ヒカリ":10117,"ヒナ":10004,"ヒナタ":10036,"ヒビキ":20000,"ヒフミ":10003,"ヒマリ":20020,"ヒヨリ":20017,"フィーナ":16004,"フウカ":23001,"フブキ":16008,"フユ":10128,"ホシノ":10005,"マキ":10007,"マコト":20033,"マシロ":20003,"マリー":23008,"マリナ":10037,"ミカ":10059,"ミサキ":10041,"ミチル":16009,"ミドリ":10016,"ミナ":10070,"ミネ":10058,"ミノリ":20026,"ミモリ":10034,"ミヤコ":10038,"ミユ":10039,"ミヨ":10127,"ムツキ":13006,"メグ":10060,"メル":10075,"モエ":20018,"モミジ":13013,"モモイ":13011,"ヤクモ":20052,"ユウカ":13010,"ユカリ":10081,"ユズ":10018,"ヨシミ":26005,"ラブ":16018,"リオ":20041,"リツ":20050,"ルミ":10069,"レイ":10115,"レイサ":10068,"レイジョ":10104,"レナ":10138,"レンゲ":10082,"ワカモ":10033,"御坂美琴":10079,"佐天涙子":26011,"初音ミク":20007,"食蜂操祈":10080,"アイリ（バンド）":16015,"アカネ（バニーガール）":20019,"アカネ（制服）":20057,"アカリ（正月）":20034,"アコ（ドレス）":10087,"アズサ（水着）":10021,"アスナ（バニーガール）":10028,"アスナ（制服）":10112,"アツコ（水着）":26013,"アヤネ（水着）":26007,"アリス（メイド）":10066,"アリス（臨戦）":10134,"アル（ドレス）":10089,"アル（正月）":10031,"イオリ（水着）":10023,"イズナ（水着）":10046,"イズミ（水着）":16006,"イズミ（正月）":20043,"イチカ（水着）":26015,"ウイ（水着）":10073,"ウタハ（応援団）":10051,"エイミ（水着）":20032,"エイミ（臨戦）":10136,"カズサ（バンド）":10091,"カヨコ（ドレス）":10088,"カヨコ（正月）":10064,"カリン（バニーガール）":10027,"カリン（制服）":26014,"カンナ（水着）":10096,"キキョウ（水着）":20047,"キリノ（水着）":26012,"コタマ（キャンプ）":10084,"コトリ（応援団）":10076,"コハル（水着）":16013,"コユキ（パジャマ）":20056,"サオリ（ドレス）":10116,"サオリ（水着）":10101,"サキ（水着）":10072,"サクラコ（アイドル）":10106,"サヤ（私服）":20006,"シグレ（温泉）":20031,"シズコ（水着）":26008,"ジュリ（アルバイト）":10114,"シュン（幼女）":10025,"ジュンコ（正月）":16012,"シロコ（ライディング）":10024,"シロコ（水着）":20027,"スズミ（マジカル）":10129,"スミレ（アルバイト）":20044,"セイア（水着）":10123,"セナ（私服）":10113,"セリカ（水着）":20036,"セリカ（正月）":20011,"セリナ（クリスマス）":10056,"チェリノ（温泉）":20009,"チセ（水着）":10047,"チナツ（温泉）":10030,"ツクヨ（ドレス）":10132,"ツバキ（ガイド）":20035,"ツルギ（水着）":16005,"トキ（バニーガール）":10067,"トキ（臨戦）":16019,"トモエ（チーパオ）":20038,"ナギサ（水着）":20048,"ナグサ（水着）":10142,"ナツ（バンド）":10120,"ネル（バニーガール）":10026,"ネル（制服）":10111,"ノア（パジャマ）":10109,"ノドカ（温泉）":20010,"ノノミ（水着）":10044,"ハスミ（水着）":10124,"ハスミ（体操服）":16011,"ハナエ（クリスマス）":20021,"ハナコ（水着）":10074,"ハルカ（ドレス）":10141,"ハルカ（正月）":20025,"ハルナ（正月）":10057,"ハルナ（体操服）":20030,"ハレ（キャンプ）":10085,"ヒナ（ドレス）":10086,"ヒナ（水着）":10022,"ヒナタ（水着）":20028,"ヒビキ（応援団）":16010,"ヒフミ（水着）":20005,"ヒマリ（臨戦）":20054,"ヒヨリ（水着）":10102,"フィーナ（ガイド）":20045,"フウカ（正月）":20022,"フブキ（水着）":20037,"ホシノ（水着）":10045,"ホシノ（臨戦）":10099,"マキ（キャンプ）":20042,"マシロ（水着）":20004,"マリー（アイドル）":10105,"マリー（体操服）":10054,"マリナ（チーパオ）":10103,"ミカ（水着）":10122,"ミサキ（水着）":20049,"ミチル（ドレス）":20053,"ミドリ（メイド）":10095,"ミネ（アイドル）":16016,"ミモリ（水着）":20029,"ミヤコ（水着）":10071,"ミユ（水着）":26010,"ムツキ（ドレス）":20059,"ムツキ（正月）":10032,"モエ（水着）":10097,"モモイ（メイド）":10094,"ユウカ（パジャマ）":10108,"ユウカ（体操服）":10053,"ユカリ（水着）":10121,"ユズ（メイド）":26009,"ユズ（臨戦）":20055,"ヨシミ（バンド）":10092,"リオ（臨戦）":10133,"レイサ（マジカル）":20051,"レンゲ（水着）":13014,"ワカモ（水着）":10043};
 /* CHAR_ICONS:END */
 const ICON_BASE = "https://schaledb.com/images/student/icon/";
 function iconUrlFor(name){ const id=CHAR_ICONS[name]; return id!=null ? ICON_BASE+id+".webp" : null; }
@@ -354,20 +357,14 @@ function renderTable(){
 function buildRow(row){
   const el=document.createElement("div"); el.className="trow"+(row.id===state.activeId?" active":"");
   el.dataset.row=row.id;
-  const num=document.createElement("input"); num.className="c-num"; num.value=circledCost(row.num); num.placeholder="";
-  num.setAttribute("inputmode","text");
   const time=document.createElement("input"); time.className="c-time"; time.value=row.time; time.setAttribute("inputmode","numeric");
   const cells=document.createElement("div"); cells.className="cellwrap c-cells";
   const memo=document.createElement("input"); memo.className="c-memo"; memo.value=row.memo;
-  // コスト欄: 入力中は生の値、フォーカスを外すと丸数字表示
-  num.onfocus=()=>{ num.value=row.num; setActive(row.id); snapshotHistory(); };
-  num.oninput=()=>{ row.num=num.value; save(); };
-  num.onblur=()=>{ num.value=circledCost(row.num); };
   time.oninput=()=>{ row.time=time.value; save(); };
   memo.oninput=()=>{ row.memo=memo.value; save(); };
   [time,memo].forEach(inp=> inp.addEventListener("focus",()=>{ setActive(row.id); snapshotHistory(); }) );
   cells.addEventListener("click",()=>setActive(row.id));
-  el.append(num,time,cells,memo);
+  el.append(time,cells,memo);
   renderCells(row, cells);
   return el;
 }
@@ -378,7 +375,9 @@ function renderCells(row, wrap){
   row.cells.forEach((cell,idx)=>{
     const c=rosterById(cell.charId);
     const d=document.createElement("div"); d.className="cell";
-    d.innerHTML=avatarHTML(c,"")+(cell.badge?`<span class="cbadge">${escapeHTML(String(cell.badge))}</span>`:"")+(cell.mark?`<span class="cmark">${escapeHTML(cell.mark)}</span>`:"");
+    // コスト: その行の先頭セル(idx===0)のみ左下に橙色バッジで表示
+    const costBadge=(idx===0 && row.num)?`<span class="ccost">${escapeHTML(circledCost(row.num))}</span>`:"";
+    d.innerHTML=avatarHTML(c,"")+costBadge+(cell.badge?`<span class="cbadge">${escapeHTML(String(cell.badge))}</span>`:"")+(cell.mark?`<span class="cmark">${escapeHTML(cell.mark)}</span>`:"");
     if(cell.ring){ const av=d.querySelector(".av"); if(av){ av.style.borderColor=cell.ring; av.style.borderWidth="3px"; } }
     attachFlick(d, row, idx);
     wrap.appendChild(d);
@@ -574,47 +573,61 @@ function findRosterChar(name){
   // 2. 完全一致
   c=state.roster.find(x=>x.name===name);
   if(c) return c;
-  // 3. 入力がロスター名で始まる（例: "アリスチャージ" → "アリス(臨戦)" に前方一致）
+  // 3. 入力がロスター名で始まる（例: "アリス（臨戦）チャージ" → "アリス（臨戦）" に前方一致）
   //    最長一致優先
   const fwd=state.roster.filter(x=>x.name && name.startsWith(x.name))
     .sort((a,b)=>b.name.length-a.name.length);
   if(fwd.length) return fwd[0];
   // 4. ベース名（括弧前）が一致するキャラがロスターに1件だけなら確定マッチ
-  //    例: ロスターに「アリス(臨戦)」のみ → 「アリス」で確定
+  //    例: ロスターに「アリス（臨戦）」のみ → 「アリス」で確定
   const base=name.replace(/[（(].+$/,"").trim();
   if(base){
     const candidates=state.roster.filter(x=>x.name && x.name.replace(/[（(].+$/,"").trim()===base);
     if(candidates.length===1) return candidates[0];
   }
+  // 5. ロスター各キャラの「ベース名」が入力の先頭にあり、そのベース名で一意に絞れるなら確定マッチ
+  //    例: 入力"アリスチャージ①" かつ ロスターに「アリス（臨戦）」のみ
+  //    → ベース名"アリス"が入力先頭に一致 → 確定（4とは逆方向の判定）
+  const baseMatches=state.roster.filter(x=>{
+    if(!x.name) return false;
+    const xBase=x.name.replace(/[（(].+$/,"").trim();
+    return xBase && name.startsWith(xBase);
+  });
+  if(baseMatches.length===1) return baseMatches[0];
   return null;
 }
 // セグメント本文(キャラ名候補1つ分)を「ロスター名 + 残り文字列」に分解する。
 // 残り文字列に丸数字が1つ以上含まれていれば、そのキャラを丸数字の個数だけ
 // 複製してそれぞれにbadge(半角数字)を割り当てる（例: "アリスチャージ①②" → アリス×2、badge=1,2）。
 function splitNameAndBadges(body){
-  // 行頭の「C」「Ｃ」はコピー能力の印。除いてからキャラ名照合し、mark に返す
-  let copyPrefix=null;
-  let bodyWork=body;
-  if(/^(コピー|©︎|©)/.test(bodyWork)){ copyPrefix="C"; bodyWork=bodyWork.replace(/^(コピー|©︎|©)/,"").trim(); }
-  else if(/^[CＣ]/.test(bodyWork)){ copyPrefix="C"; bodyWork=bodyWork.slice(1); }
-  const c=findRosterChar(bodyWork);
+  // 行頭の「C」「Ｃ」「©」「©︎」「コピー」はコピー能力の印。除いてからキャラ名照合し、mark に返す。
+  // ただし「Cアリス」のCがキャラ名の一部（該当キャラなし）の場合に備え、
+  // プレフィックス除去後にマッチしなければ、除去前の原文でも再試行する。
+  let copyPrefix=null, bodyNoPrefix=body;
+  if(/^(コピー|©︎|©)/.test(body)){ copyPrefix="C"; bodyNoPrefix=body.replace(/^(コピー|©︎|©)/,"").trim(); }
+  else if(/^[CＣ]/.test(body)){ copyPrefix="C"; bodyNoPrefix=body.slice(1); }
+
+  let c=copyPrefix ? findRosterChar(bodyNoPrefix) : null;
+  let matchedBody=bodyNoPrefix;
   if(!c){
-    // プレフィックスなしで再試行（"Cアリス" のCがキャラ名の一部の場合を除外済み）
-    if(!copyPrefix) return null;
-    const c2=findRosterChar(body); // プレフィックスなし原文でも試す
-    if(!c2) return null;
-    const restRaw2=body.slice(c2.name.length);
-    const circledChars2=[...restRaw2].filter(ch=>circledToNum(ch)!=null);
-    const badges2=circledChars2.length?circledChars2.map(circledToNum):[null];
-    const suffix2=restRaw2.replace(/[\u2460-\u2473\u24EA]/g,"").trim();
-    const markLabel2=[suffix2.slice(0,2)].filter(Boolean).join("")||null;
-    return { char:c2, suffix:suffix2, badges:badges2, mark:markLabel2 };
+    // プレフィックス除去なしの原文でマッチを試みる（"C"が名前の一部だったケースを含む）
+    c=findRosterChar(body);
+    matchedBody=body;
+    if(c) copyPrefix=null; // 原文でマッチした = Cはプレフィックスではなかった
   }
-  const restRaw=bodyWork.slice(c.name.length);
+  if(!c) return null;
+
+  // 実際に一致した先頭部分の長さを求める（完全一致/前方一致ならフル名、
+  // ベース名一致ならベース名の長さ。findRosterChar の判定と揃える）
+  const cBase=c.name.replace(/[（(].+$/,"").trim();
+  const matchLen = matchedBody.startsWith(c.name) ? c.name.length
+    : (cBase && matchedBody.startsWith(cBase)) ? cBase.length
+    : c.name.length; // フォールバック（あだ名解決等）
+  const restRaw=matchedBody.slice(matchLen);
   const circledChars=[...restRaw].filter(ch=>circledToNum(ch)!=null);
   const badges = circledChars.length ? circledChars.map(circledToNum) : [null];
   const suffix = restRaw.replace(/[\u2460-\u2473\u24EA]/g,"").trim();
-  // mark: Cプレフィックス + suffix（最大3文字）
+  // mark: Cプレフィックス + suffix（最大2文字）
   const markParts=[copyPrefix, suffix.slice(0,2)].filter(Boolean);
   const markLabel=markParts.length ? markParts.join("") : null;
   return { char:c, suffix, badges, mark:markLabel };
@@ -1036,7 +1049,7 @@ document.getElementById("btnRoster").onclick=()=>{
   const items=state.roster.map(c=>
     `<div class="mgrItem">${avatarHTML(c,"r")}<span class="name">${escapeHTML(c.name||c.text||"(無名)")}</span>
      <button data-edit="${c.id}">編集</button></div>`).join("") || '<div style="color:var(--sub)">まだキャラがいません</div>';
-  openSheet(`<h2>今回使用のキャラ（${state.roster.length}/10）</h2>${items}
+  openSheet(`<h2>今回使用のキャラ（${state.roster.length}/20）</h2>${items}
     <div class="sheet-actions"><button class="btn ghost" id="mClose">閉じる</button>
     <button class="btn primary" id="mAdd">＋ 追加</button></div>`);
   sheet.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openCharSheet(b.dataset.edit));
@@ -1048,8 +1061,8 @@ document.getElementById("btnRoster").onclick=()=>{
 function openCharSheet(charId){
   let c = charId ? rosterById(charId) : null;
   const isNew=!c;
-  if(state.roster.length>=10 && isNew){ alert("キャラは最大10体まで"); return; }
-  const nextNum=()=>{ for(let i=1;i<=10;i++){ if(!state.roster.some(r=>r.num===i)) return i; } return state.roster.length+1; };
+  if(state.roster.length>=20 && isNew){ alert("キャラは最大20体まで"); return; }
+  const nextNum=()=>{ for(let i=1;i<=20;i++){ if(!state.roster.some(r=>r.num===i)) return i; } return state.roster.length+1; };
   const draft = c ? JSON.parse(JSON.stringify(c)) :
     { id:uid(), name:"", text:"", color:PALETTE[state.roster.length%PALETTE.length], img:null, num:nextNum() };
 
@@ -1189,8 +1202,8 @@ function flash(msg){ const h=document.getElementById("hint"); const o=h.textCont
 function exportPNG(){
   const rows=state.rows;
   if(rows.every(r=>!r.num&&!r.time&&!r.cells.length&&!r.memo)){ alert("内容がありません"); return; }
-  const W=760, pad=16, NUM=56, TIME=74, MEMO=170, IC=34, GAP=5;
-  const cellsX=pad+NUM+TIME, cellsW=W-pad-MEMO-cellsX, perLine=Math.max(1,Math.floor((cellsW+GAP)/(IC+GAP)));
+  const W=760, pad=16, TIME=74, MEMO=200, IC=34, GAP=5;
+  const cellsX=pad+TIME, cellsW=W-pad-MEMO-cellsX, perLine=Math.max(1,Math.floor((cellsW+GAP)/(IC+GAP)));
   const headH=60+(state.roster.length?48:0);
   const rowHeights=rows.map(r=>{ const lines=Math.max(1,Math.ceil((r.cells.length||0)/perLine)); return Math.max(54, lines*(IC+8)+8); });
   const H=headH + rowHeights.reduce((a,b)=>a+b,0) + pad;
@@ -1214,7 +1227,7 @@ function exportPNG(){
     // header row
     const hy=top; ctx.fillStyle="#222845"; ctx.fillRect(0,hy,W,26);
     ctx.fillStyle="#9aa3c7"; ctx.font="bold 12px sans-serif"; ctx.textBaseline="middle";
-    ctx.fillText("コスト", pad+8, hy+13); ctx.fillText("タイム", pad+NUM+8, hy+13);
+    ctx.fillText("タイム", pad+8, hy+13);
     ctx.fillText("キャラ配置", cellsX+6, hy+13); ctx.fillText("メモ", W-MEMO+6, hy+13);
     let y=hy+26;
     rows.forEach((r,ri)=>{
@@ -1224,12 +1237,15 @@ function exportPNG(){
       const cy=y+h/2;
       ctx.textBaseline="middle";
       ctx.fillStyle="#eef1ff"; ctx.font="bold 16px sans-serif"; ctx.textAlign="center";
-      if(r.num) ctx.fillText(circledCost(r.num), pad+NUM/2, cy);
-      ctx.fillStyle="#5b8cff"; if(r.time) ctx.fillText(r.time, pad+NUM+TIME/2, cy);
+      ctx.fillStyle="#5b8cff"; if(r.time) ctx.fillText(r.time, pad+TIME/2, cy);
       // cells
       r.cells.forEach((cell,i)=>{ const line=Math.floor(i/perLine), col=i%perLine;
         const x=cellsX+col*(IC+GAP)+IC/2, yy=y+8+line*(IC+8)+IC/2;
         drawAvatar(ctx, rosterById(cell.charId), x, yy, IC/2, imgs, cell.ring);
+        // コスト: 先頭セルのみ左下に橙色バッジ
+        if(i===0 && r.num){ const cv2=circledCost(r.num);
+          ctx.fillStyle="#c85000"; ctx.beginPath(); ctx.arc(x-IC/2+3,yy+IC/2-3,8,0,7); ctx.fill();
+          ctx.fillStyle="#fff"; ctx.font="bold 11px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(cv2,x-IC/2+3,yy+IC/2-3); }
         if(cell.badge){ ctx.fillStyle="#000c"; ctx.beginPath(); ctx.arc(x+IC/2-3,yy+IC/2-3,8,0,7); ctx.fill();
           ctx.fillStyle="#fff"; ctx.font="bold 11px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(String(cell.badge),x+IC/2-3,yy+IC/2-3); }
         if(cell.mark){ const mk=String(cell.mark), mkW=Math.max(15,mk.length*7+4);
